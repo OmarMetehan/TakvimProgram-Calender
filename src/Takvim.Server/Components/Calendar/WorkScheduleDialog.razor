@@ -141,7 +141,7 @@
 
         var saved = await db.WorkingHours
             .AsNoTracking()
-            .Where(w => w.UserId == CalendarBootstrapper.LocalUserId)
+            .Where(w => w.UserId == State.ActiveUserId)
             .ToDictionaryAsync(w => w.DayOfWeek);
 
         _week.Clear();
@@ -149,7 +149,7 @@
         {
             _week.Add(saved.TryGetValue(day, out var existing)
                 ? existing
-                : new WorkingHours { UserId = CalendarBootstrapper.LocalUserId, DayOfWeek = day });
+                : new WorkingHours { UserId = State.ActiveUserId, DayOfWeek = day });
         }
     }
 
@@ -210,7 +210,7 @@
         await using (var scope = Scopes.CreateAsyncScope())
         {
             var service = scope.ServiceProvider.GetRequiredService<WorkScheduleService>();
-            await service.SaveWeeklyAsync(CalendarBootstrapper.LocalUserId, _week);
+            await service.SaveWeeklyAsync(State.ActiveUserId, _week);
         }
 
         await State.ReloadAsync();

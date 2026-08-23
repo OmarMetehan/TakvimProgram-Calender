@@ -22,8 +22,8 @@
                 <div style="flex:1">
                     <label class="etiket" for="disa-takvim">Takvim</label>
                     <select id="disa-takvim" class="alan" @bind="_exportCalendarId">
-                        <option value="@Guid.Empty">Tüm takvimler</option>
-                        @foreach (var calendar in State.Calendars)
+                        <option value="@Guid.Empty">Kendi takvimlerimin tümü</option>
+                        @foreach (var calendar in State.Calendars.Where(c => c.OwnerUserId == State.ActiveUserId))
                         {
                             <option value="@calendar.Id">@calendar.Name</option>
                         }
@@ -45,7 +45,7 @@
             <div>
                 <label class="etiket" for="ice-takvim">Hedef takvim</label>
                 <select id="ice-takvim" class="alan" @bind="_importCalendarId">
-                    @foreach (var calendar in State.Calendars.Where(c => !c.IsReadOnly))
+                    @foreach (var calendar in State.WritableCalendars)
                     {
                         <option value="@calendar.Id">@calendar.Name</option>
                     }
@@ -133,19 +133,27 @@
             {
                 var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
 
-                var query = db.Events
-                    .AsNoTracking()
-                    .Include(e => e.Reminders)
-                    .Where(e => e.DeletedAt == null);
+                // Dışa aktarma yalnızca kullanıcının kendi takvimlerini kapsar.
+                // Paylaşılmış bir takvimi görebilmek, onu dosyaya dökme hakkı vermez.
+                var owned = State.Calendars
+                    .Where(c => c.OwnerUserId == State.ActiveUserId)
+                    .Select(c => c.Id)
+                    .ToList();
 
                 if (_exportCalendarId != Guid.Empty)
-                    query = query.Where(e => e.CalendarId == _exportCalendarId);
+                {
+                    owned = owned.Where(id => id == _exportCalendarId).ToList();
+                }
 
-                events = await query.ToListAsync();
+                events = await db.Events
+                    .AsNoTracking()
+                    .Include(e => e.Reminders)
+                    .Where(e => e.DeletedAt == null && owned.Contains(e.CalendarId))
+                    .ToListAsync();
             }
 
             calendarName = _exportCalendarId == Guid.Empty
-                ? "Tüm takvimler"
+                ? "Takvimlerim"
                 : State.CalendarOf(_exportCalendarId)?.Name ?? "Takvim";
 
             var ics = Ics.Export(events, calendarName);
@@ -198,6 +206,13 @@
 
             // Aynı UID zaten varsa yeniden eklenmez; içe aktarma iki kez çalıştırılırsa
             // kayıtlar çoğalmasın.
+            // Hedef takvim kullanıcının yazabildiği bir takvim olmalı.
+            if (!State.WritableCalendars.Any(c => c.Id == _importCalendarId))
+            {
+                State.ShowStatus("Bu takvime yazma yetkiniz yok.");
+                return;
+            }
+
             var existingUids = await db.Events
                 .Where(e => e.CalendarId == _importCalendarId)
                 .Select(e => e.Uid)

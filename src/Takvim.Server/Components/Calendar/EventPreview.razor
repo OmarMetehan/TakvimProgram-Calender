@@ -7,7 +7,7 @@
     <div class="onizleme__ust">
         <span class="onizleme__renk"></span>
         <h2 class="onizleme__baslik">
-            @(string.IsNullOrWhiteSpace(Occurrence.Source.Title) ? "(başlıksız)" : Occurrence.Source.Title)
+            @Occurrence.DisplayTitle
         </h2>
         <button class="dugme dugme--simge" aria-label="Kapat" @onclick="() => OnClose.InvokeAsync()">✕</button>
     </div>
@@ -41,11 +41,11 @@
         </div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(Occurrence.Source.LocationText))
+    @if (!string.IsNullOrWhiteSpace(Occurrence.DisplayLocation))
     {
         <div class="onizleme__satir">
             <span aria-hidden="true">📍</span>
-            <span>@Occurrence.Source.LocationText</span>
+            <span>@Occurrence.DisplayLocation</span>
         </div>
     }
 
@@ -88,7 +88,44 @@
         </div>
     }
 
-    @if (Reminders.Count > 0)
+    @if (Attendees.Count > 0 && Occurrence.CanSeeDetails)
+    {
+        <div class="onizleme__satir">
+            <span aria-hidden="true">👥</span>
+            <span style="flex:1">
+                <div>@AttendeeService.Summarize(Attendees).Text</div>
+                @foreach (var attendee in Attendees.Take(6))
+                {
+                    <div style="display:flex;gap:6px;align-items:center;margin-top:3px">
+                        <span class="yanit @ResponseClass(attendee.Response)">
+                            @AttendeeService.Describe(attendee.Response)
+                        </span>
+                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @attendee.DisplayName
+                            @if (attendee.Role == AttendeeRole.Optional)
+                            {
+                                <span style="color:var(--metin-3)"> · isteğe bağlı</span>
+                            }
+                        </span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(attendee.ResponseComment))
+                    {
+                        <div style="font-size:12px;color:var(--metin-3);padding-left:6px">
+                            "@attendee.ResponseComment"
+                        </div>
+                    }
+                }
+                @if (Attendees.Count > 6)
+                {
+                    <div style="font-size:12px;color:var(--metin-3);margin-top:3px">
+                        ve @(Attendees.Count - 6) kişi daha
+                    </div>
+                }
+            </span>
+        </div>
+    }
+
+    @if (Reminders.Count > 0 && Occurrence.CanSeeDetails)
     {
         <div class="onizleme__satir">
             <span aria-hidden="true">🔔</span>
@@ -96,13 +133,15 @@
         </div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(Description))
+    @if (!string.IsNullOrWhiteSpace(Description) && Occurrence.CanSeeDetails)
     {
         <div class="onizleme__satir" style="max-height:120px;overflow-y:auto">
             <span aria-hidden="true">☰</span>
             <span style="white-space:pre-wrap">@Description</span>
         </div>
     }
+
+    <RsvpBar Occurrence="Occurrence" OnResponded="OnResponded" />
 
     <div class="onizleme__dugmeler">
         @if (!IsReadOnly)
@@ -131,11 +170,28 @@
     [Parameter] public EventCallback OnDelete { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
+    /// <summary>Davete yanıt verildikten sonra görünümün tazelenmesi için.</summary>
+    [Parameter] public EventCallback OnResponded { get; set; }
+
+    /// <summary>Etkinliğin katılımcıları; yalnızca detayları görebilenlere gösterilir.</summary>
+    [Parameter] public IReadOnlyList<Attendee> Attendees { get; set; } = [];
+
+    private static string ResponseClass(ResponseStatus status) => status switch
+    {
+        ResponseStatus.Accepted => "yanit--kabul",
+        ResponseStatus.Declined => "yanit--ret",
+        ResponseStatus.Tentative => "yanit--belirsiz",
+        _ => "yanit--bekliyor",
+    };
+
     private string Color => State.ColorOf(Occurrence);
 
     private string? CalendarName => State.CalendarOf(Occurrence.Source.CalendarId)?.Name;
 
-    private bool IsReadOnly => State.CalendarOf(Occurrence.Source.CalendarId)?.IsReadOnly ?? false;
+    /// <summary>Düzenleme düğmeleri yalnızca gerçekten yetkisi olana gösterilir.</summary>
+    private bool IsReadOnly
+        => !Occurrence.CanEdit
+        || (State.CalendarOf(Occurrence.Source.CalendarId)?.IsReadOnly ?? false);
 
     private List<Category> Categories =>
         [.. State.Categories.Where(c => Occurrence.Source.Categories.Any(ec => ec.CategoryId == c.Id))];

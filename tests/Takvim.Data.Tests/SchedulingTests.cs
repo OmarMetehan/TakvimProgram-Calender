@@ -196,4 +196,85 @@ public class SchedulingTests : IDisposable
 
         Assert.Empty(lanes);
     }
+
+    // ------------------------------------------------------------------
+    // Kişi satırları
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Kisi_satiri_kullanicinin_tum_takvimlerini_kapsar()
+    {
+        // Kişinin iş ve kişisel takvimi ayrı; müsaitlik ikisinin birleşimidir.
+        var ikinciTakvim = new Calendar { Name = "İş", OwnerUserId = _t.UserId };
+        _t.Db.Calendars.Add(ikinciTakvim);
+        _t.Db.SaveChanges();
+        _t.Detach();
+
+        await _t.Events.CreateAsync(_t.Input("2026-03-02 10:00", "2026-03-02 11:00", "Kişisel"));
+        _t.Detach();
+
+        var isEtkinligi = _t.Input("2026-03-02 14:00", "2026-03-02 15:00", "İş") with
+        {
+            CalendarId = ikinciTakvim.Id,
+        };
+        await _t.Events.CreateAsync(isEtkinligi);
+        _t.Detach();
+
+        var lanes = await _scheduling.GetPeopleLanesAsync(
+            [(_t.UserId, "Ben", true)],
+            _t.Utc("2026-03-02 00:00"),
+            _t.Utc("2026-03-03 00:00"),
+            new LocalDate(2026, 3, 2),
+            "Europe/Istanbul");
+
+        Assert.Single(lanes);
+        Assert.Equal(2, lanes[0].Busy.Count);
+    }
+
+    [Fact]
+    public async Task Kisi_satirinda_zorunluluk_tasinir()
+    {
+        var (ayse, _) = _t.AddUser("Ayşe", "ayse@ornek.local");
+
+        var lanes = await _scheduling.GetPeopleLanesAsync(
+            [(_t.UserId, "Ben", true), (ayse, "Ayşe", false)],
+            _t.Utc("2026-03-02 00:00"),
+            _t.Utc("2026-03-03 00:00"),
+            new LocalDate(2026, 3, 2),
+            "Europe/Istanbul");
+
+        Assert.True(lanes[0].IsRequired);
+        Assert.False(lanes[1].IsRequired);
+    }
+
+    [Fact]
+    public async Task Kisi_satiri_baskasinin_etkinlik_basligini_tasimaz()
+    {
+        // Serbest/meşgul paylaşımının tanımı: yalnızca aralık, içerik değil.
+        var (ayse, ayseCal) = _t.AddUser("Ayşe", "ayse@ornek.local");
+
+        var gizli = _t.Input("2026-03-02 10:00", "2026-03-02 11:00", "Gizli görüşme") with
+        {
+            CalendarId = ayseCal,
+        };
+        await _t.Events.CreateAsync(gizli);
+        _t.Detach();
+
+        var lanes = await _scheduling.GetPeopleLanesAsync(
+            [(ayse, "Ayşe", true)],
+            _t.Utc("2026-03-02 00:00"),
+            _t.Utc("2026-03-03 00:00"),
+            new LocalDate(2026, 3, 2),
+            "Europe/Istanbul");
+
+        // Satırda yalnızca meşgul aralığı var; başlık taşıyan bir alan yok.
+        Assert.Single(lanes[0].Busy);
+        Assert.Equal("Ayşe", lanes[0].Name);
+    }
+
+    [Fact]
+    public async Task Bos_katilimci_listesi_satir_uretmez()
+        => Assert.Empty(await _scheduling.GetPeopleLanesAsync(
+            [], _t.Utc("2026-03-02 00:00"), _t.Utc("2026-03-03 00:00"),
+            new LocalDate(2026, 3, 2), "Europe/Istanbul"));
 }

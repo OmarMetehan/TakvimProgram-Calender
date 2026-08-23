@@ -61,7 +61,7 @@
         @if (_lanes.Count == 0)
         {
             <div class="bos-durum" style="padding:24px">
-                <span>Gösterilecek takvim yok. Kenar çubuğundan en az bir takvim seçin.</span>
+                <span>Gösterilecek satır yok. Kenar çubuğundan en az bir takvim seçin.</span>
             </div>
         }
 
@@ -100,6 +100,14 @@
             </div>
         }
     </div>
+
+    @if (UnknownAttendees.Count > 0)
+    {
+        <div style="font-size:12px;color:var(--uyari)">
+            @string.Join(", ", UnknownAttendees.Select(a => a.DisplayName)) — bu makinede
+            hesapları olmadığı için müsaitlikleri bilinemiyor.
+        </div>
+    }
 
     <div style="display:flex;align-items:center;gap:10px">
         <strong style="font-size:15px">
@@ -153,6 +161,12 @@
     /// <summary>Düzenlenen etkinliğin süresi, dakika.</summary>
     [Parameter] public int InitialDurationMinutes { get; set; } = 60;
 
+    /// <summary>
+    /// Toplantının katılımcıları. Verilirse ızgara kişilerin müsaitliğini
+    /// gösterir; boşsa kullanıcının kendi takvimlerini karşılaştırır.
+    /// </summary>
+    [Parameter] public IReadOnlyList<AttendeeDraft> Attendees { get; set; } = [];
+
     /// <summary>Seçilen aralık onaylandığında.</summary>
     [Parameter] public EventCallback<(LocalDateTime Start, LocalDateTime End)> OnPick { get; set; }
 
@@ -194,23 +208,45 @@
 
     private async Task LoadAsync()
     {
-        var calendarIds = State.VisibleCalendars.Select(c => c.Id).ToList();
+        var from = ToInstant(_date.AtMidnight());
+        var to = ToInstant(_date.PlusDays(1).AtMidnight());
 
         await using (var scope = Scopes.CreateAsyncScope())
         {
             var scheduling = scope.ServiceProvider.GetRequiredService<SchedulingService>();
 
-            _lanes = await scheduling.GetLanesAsync(
-                calendarIds,
-                ToInstant(_date.AtMidnight()),
-                ToInstant(_date.PlusDays(1).AtMidnight()),
-                CalendarBootstrapper.LocalUserId,
-                _date,
-                State.ZoneId);
+            // Yerel hesabı olan katılımcıların müsaitliği bilinebilir; dış
+            // kişilerinki bilinemediği için ızgarada satırları olmaz.
+            var people = Attendees
+                .Where(a => a.UserId is not null)
+                .Select(a => (UserId: a.UserId!.Value, a.DisplayName,
+                              IsRequired: a.Role == AttendeeRole.Required))
+                .ToList();
+
+            if (people.Count > 0)
+            {
+                // Organizatör de kendi satırını görmeli.
+                var me = State.ActiveUser;
+                if (me is not null && people.TrueForAll(p => p.UserId != me.Id))
+                {
+                    people.Insert(0, (me.Id, me.DisplayName + " (siz)", true));
+                }
+
+                _lanes = await scheduling.GetPeopleLanesAsync(people, from, to, _date, State.ZoneId);
+            }
+            else
+            {
+                _lanes = await scheduling.GetLanesAsync(
+                    [.. State.VisibleCalendars.Select(c => c.Id)],
+                    from, to, State.ActiveUserId, _date, State.ZoneId);
+            }
         }
 
         Recompute();
     }
+
+    /// <summary>Müsaitliği bilinemeyen dış katılımcılar.</summary>
+    private List<AttendeeDraft> UnknownAttendees => [.. Attendees.Where(a => a.UserId is null)];
 
     private void Recompute()
     {
@@ -332,7 +368,8 @@
             var conflicts = _lanes.Count(l =>
                 l.Busy.Any(b => b.IsBlocking && b.Overlaps(_selectedStart, _selectedEnd)));
 
-            return conflicts == 0 ? "Çakışma yok" : $"{conflicts} takvimde çakışıyor";
+            var unit = Attendees.Any(a => a.UserId is not null) ? "kişide" : "takvimde";
+            return conflicts == 0 ? "Çakışma yok" : $"{conflicts} {unit} çakışıyor";
         }
     }
 
@@ -341,7 +378,8 @@
         if (suggestion.IsPerfect) return "Herkes müsait";
 
         var parts = new List<string>();
-        if (suggestion.ConflictingRequired > 0) parts.Add($"{suggestion.ConflictingRequired} takvimde çakışıyor");
+        if (suggestion.ConflictingRequired > 0) parts.Add($"{suggestion.ConflictingRequired} zorunlu katılımcı meşgul");
+        if (suggestion.ConflictingOptional > 0) parts.Add($"{suggestion.ConflictingOptional} isteğe bağlı meşgul");
         if (suggestion.OutsideWorkingHours) parts.Add("mesai dışı");
 
         return string.Join(", ", parts);

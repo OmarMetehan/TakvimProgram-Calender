@@ -28,6 +28,7 @@ public sealed class CalendarUiState(
     IClock clock)
 {
     private readonly List<Calendar> _calendars = [];
+    private readonly List<User> _users = [];
     private readonly List<Category> _categories = [];
     private List<EventOccurrence> _occurrences = [];
     private Dictionary<LocalDate, DaySchedule> _schedules = [];
@@ -52,7 +53,18 @@ public sealed class CalendarUiState(
     public UndoPrompt? PendingUndo { get; private set; }
     public string? StatusMessage { get; private set; }
 
-    /// <summary>Kullanıcının zaman dilimi. Tüm görünümler bu dilimde çizilir.</summary>
+    /// <summary>
+    /// Şu anda takvimi görüntülenen kullanıcı. Tek makinede birden çok yerel
+    /// hesap olabildiği için tüm okuma ve yazma yolları bu kimliği kullanır.
+    /// </summary>
+    public Guid ActiveUserId { get; private set; } = CalendarBootstrapper.LocalUserId;
+
+    public User? ActiveUser { get; private set; }
+
+    /// <summary>Bu makinedeki tüm hesaplar; kullanıcı değiştirici bunları listeler.</summary>
+    public IReadOnlyList<User> Users => _users;
+
+    /// <summary>Aktif kullanıcının zaman dilimi. Tüm görünümler bu dilimde çizilir.</summary>
     public string ZoneId { get; private set; } = TimeZoneService.DefaultZoneId;
 
     public LocalDate Today => timeZones.TodayIn(ZoneId, clock);
@@ -67,35 +79,64 @@ public sealed class CalendarUiState(
     // Yükleme
     // ------------------------------------------------------------------
 
-    /// <summary>Takvimleri ve kategorileri okur. Uygulama açılışında bir kez çağrılır.</summary>
-    public async Task InitializeAsync(CalendarViewState view, CancellationToken ct = default)
+    /// <summary>Takvimleri, kategorileri ve hesapları okur. Açılışta bir kez çağrılır.</summary>
+    public async Task InitializeAsync(
+        CalendarViewState view, Guid? activeUserId = null, CancellationToken ct = default)
     {
         View = view;
+        if (activeUserId is { } id) ActiveUserId = id;
 
+        await LoadUserContextAsync(ct).ConfigureAwait(false);
+        await ReloadAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Kullanıcıyı değiştirir. Tek makinede birden çok hesap olduğu için,
+    /// davetleri ve paylaşımları sınamanın yolu budur.
+    /// </summary>
+    public async Task SwitchUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (userId == ActiveUserId) return;
+
+        ActiveUserId = userId;
+
+        // Gizlenen takvimler önceki kullanıcıya aitti; seçim sıfırlanır.
+        View = View with { HiddenCalendarIds = [], CategoryFilter = [] };
+
+        await LoadUserContextAsync(ct).ConfigureAwait(false);
+        await ReloadAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Aktif kullanıcıya göre hesap listesini, takvimleri ve kategorileri tazeler.</summary>
+    public async Task LoadUserContextAsync(CancellationToken ct = default)
+    {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<TakvimDbContext>();
+        var permissions = scope.ServiceProvider.GetRequiredService<CalendarPermissions>();
 
-        var user = await db.Users
+        _users.Clear();
+        _users.AddRange(await db.Users
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == CalendarBootstrapper.LocalUserId, ct)
-            .ConfigureAwait(false);
+            .OrderBy(u => u.DisplayName)
+            .ToListAsync(ct).ConfigureAwait(false));
 
-        if (user is not null && timeZones.IsKnown(user.TimeZoneId)) ZoneId = user.TimeZoneId;
+        // Hesap silinmişse ilk hesaba düşülür; boş bir ekranla kalınmaz.
+        ActiveUser = _users.FirstOrDefault(u => u.Id == ActiveUserId) ?? _users.FirstOrDefault();
+        if (ActiveUser is not null) ActiveUserId = ActiveUser.Id;
+
+        if (ActiveUser is not null && timeZones.IsKnown(ActiveUser.TimeZoneId))
+            ZoneId = ActiveUser.TimeZoneId;
 
         _calendars.Clear();
-        _calendars.AddRange(await db.Calendars
-            .AsNoTracking()
-            .Where(c => c.DeletedAt == null)
-            .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
-            .ToListAsync(ct).ConfigureAwait(false));
+        _calendars.AddRange(await permissions
+            .GetVisibleCalendarsAsync(ActiveUserId, ct).ConfigureAwait(false));
 
         _categories.Clear();
         _categories.AddRange(await db.Categories
             .AsNoTracking()
+            .Where(c => c.OwnerUserId == ActiveUserId)
             .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
             .ToListAsync(ct).ConfigureAwait(false));
-
-        await ReloadAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>Görünen aralıktaki örnekleri yeniden okur.</summary>
@@ -117,12 +158,12 @@ public sealed class CalendarUiState(
             };
 
             _occurrences = await query
-                .GetOccurrencesAsync(RangeStartUtc, RangeEndUtc, filter, ct)
+                .GetOccurrencesAsync(ActiveUserId, RangeStartUtc, RangeEndUtc, filter, ct)
                 .ConfigureAwait(false);
 
             var schedule = scope.ServiceProvider.GetRequiredService<WorkScheduleService>();
             _schedules = await schedule
-                .GetRangeAsync(CalendarBootstrapper.LocalUserId, View.RangeStart, View.RangeEnd, ct)
+                .GetRangeAsync(ActiveUserId, View.RangeStart, View.RangeEnd, ct)
                 .ConfigureAwait(false);
         }
         finally
@@ -214,7 +255,7 @@ public sealed class CalendarUiState(
         await using (var scope = scopeFactory.CreateAsyncScope())
         {
             var service = scope.ServiceProvider.GetRequiredService<WorkScheduleService>();
-            await service.SetLocationAsync(CalendarBootstrapper.LocalUserId, date, location, note, ct)
+            await service.SetLocationAsync(ActiveUserId, date, location, note, ct)
                 .ConfigureAwait(false);
         }
 
@@ -254,7 +295,7 @@ public sealed class CalendarUiState(
         await using (var scope = scopeFactory.CreateAsyncScope())
         {
             var undo = scope.ServiceProvider.GetRequiredService<UndoService>();
-            await undo.UndoAsync(prompt.OperationId, CalendarBootstrapper.LocalUserId, ct).ConfigureAwait(false);
+            await undo.UndoAsync(prompt.OperationId, ActiveUserId, ct).ConfigureAwait(false);
         }
 
         PendingUndo = null;
@@ -278,10 +319,21 @@ public sealed class CalendarUiState(
 
     public Calendar? CalendarOf(Guid calendarId) => _calendars.FirstOrDefault(c => c.Id == calendarId);
 
+    /// <summary>Aktif kullanıcının yazabildiği takvimler.</summary>
+    public IEnumerable<Calendar> WritableCalendars
+        => _calendars.Where(c => !c.IsReadOnly && c.OwnerUserId == ActiveUserId);
+
     /// <summary>Yeni etkinliklerin varsayılan olarak ekleneceği takvim.</summary>
     public Calendar? DefaultCalendar
-        => _calendars.FirstOrDefault(c => c.Kind == CalendarKind.Personal && !c.IsReadOnly)
-        ?? _calendars.FirstOrDefault(c => !c.IsReadOnly);
+        => WritableCalendars.FirstOrDefault(c => c.Kind == CalendarKind.Personal)
+        ?? WritableCalendars.FirstOrDefault();
+
+    /// <summary>Takvim başkasına aitse sahibinin adı; kendisininse null.</summary>
+    public string? OwnerNameOf(Calendar calendar)
+    {
+        ArgumentNullException.ThrowIfNull(calendar);
+        return calendar.OwnerUserId == ActiveUserId ? null : calendar.Owner?.DisplayName;
+    }
 
     /// <summary>Belirli bir güne düşen zamanlı örnekler.</summary>
     public IEnumerable<EventOccurrence> TimedOn(LocalDate date)

@@ -56,4 +56,5 @@ public class Calendar
     public DateTimeOffset? DeletedAt { get; set; }
 
     public ICollection<Event> Events { get; set; } = [];
+    public ICollection<CalendarShare> Shares { get; set; } = [];
 }

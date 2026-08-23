@@ -16,6 +16,8 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<ChangeLogEntry> ChangeLog => Set<ChangeLogEntry>();
     public DbSet<WorkingHours> WorkingHours => Set<WorkingHours>();
     public DbSet<WorkLocationEntry> WorkLocations => Set<WorkLocationEntry>();
+    public DbSet<Attendee> Attendees => Set<Attendee>();
+    public DbSet<CalendarShare> CalendarShares => Set<CalendarShare>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -137,6 +139,38 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<Attendee>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Email).HasMaxLength(320);
+            e.Property(x => x.DisplayName).HasMaxLength(200);
+            e.Property(x => x.ResponseComment).HasMaxLength(1000);
+            e.Property(x => x.ProposalNote).HasMaxLength(1000);
+
+            e.HasOne(x => x.Event).WithMany(x => x.Attendees)
+                .HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.User).WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
+
+            // Aynı kişi bir etkinliğe iki kez davet edilemez.
+            e.HasIndex(x => new { x.EventId, x.Email }).IsUnique();
+            // "Bana gelen davetler" sorgusunun dayandığı indeks.
+            e.HasIndex(x => new { x.UserId, x.Response });
+        });
+
+        modelBuilder.Entity<CalendarShare>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne(x => x.Calendar).WithMany(c => c.Shares)
+                .HasForeignKey(x => x.CalendarId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Grantee).WithMany()
+                .HasForeignKey(x => x.GranteeUserId).OnDelete(DeleteBehavior.Cascade);
+
+            // Bir takvim bir kullanıcıyla tek bir seviyede paylaşılır.
+            e.HasIndex(x => new { x.CalendarId, x.GranteeUserId }).IsUnique();
+            e.HasIndex(x => x.GranteeUserId);
         });
 
         modelBuilder.Entity<WorkingHours>(e =>

@@ -7,12 +7,12 @@ using Takvim.Core.Scheduling;
 namespace Takvim.Data.Services;
 
 /// <summary>
-/// Zamanlama yardımcısının veri kaynağı: seçilen takvimlerin meşguliyet
-/// aralıklarını çıkarır.
+/// Zamanlama yardımcısının veri kaynağı.
 /// <para>
-/// Faz 1 tek kullanıcılı olduğu için satırlar takvimlerdir. Katılımcılar
-/// eklendiğinde aynı yapı kişileri de taşıyacak: <see cref="ScheduleLane"/>
-/// kimliğin kullanıcı mı takvim mi olduğunu bilmez.
+/// İki satır türü üretir ve <see cref="ScheduleLane"/> ikisini de aynı biçimde
+/// taşır: <see cref="GetLanesAsync"/> takvim başına, <see cref="GetPeopleLanesAsync"/>
+/// kişi başına. Toplantıda katılımcı varsa kişi satırları, yoksa kendi
+/// takvimlerinin satırları gösterilir.
 /// </para>
 /// </summary>
 public sealed class SchedulingService(
@@ -47,9 +47,89 @@ public sealed class SchedulingService(
             .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
             .ToListAsync(ct).ConfigureAwait(false);
 
+        var occurrences = await ExpandAsync([.. calendarIds], from, to, ct).ConfigureAwait(false);
+        var byCalendar = occurrences.ToLookup(o => o.Source.CalendarId);
+
+        var schedule = await workSchedule.GetDayAsync(userId, date, ct).ConfigureAwait(false);
+        var hours = ToInstantRange(schedule, date, zoneId);
+
+        return
+        [
+            .. calendars.Select(calendar => new ScheduleLane(
+                calendar.Id,
+                calendar.Name,
+                FreeBusy.Merge(byCalendar[calendar.Id]
+                    .Select(o => new BusyInterval(o.StartUtc, o.EndUtc, o.Source.Availability))),
+                IsRequired: true,
+                WorkingHours: hours))
+        ];
+    }
+
+    /// <summary>
+    /// Kişilerin müsaitlik satırlarını çıkarır. Her satır bir kullanıcının
+    /// <b>tüm</b> takvimlerini kapsar: bir kişi meşgulse hangi takviminden
+    /// olduğu toplantı planlarken önemli değildir.
+    /// <para>
+    /// Ne gösterildiği izin modeline uyar: başkasının etkinliğinin başlığı
+    /// buradan hiç okunmaz, yalnızca meşgul aralığı ve türü taşınır. Bu,
+    /// serbest/meşgul paylaşımının tanımıdır.
+    /// </para>
+    /// </summary>
+    /// <param name="participants">Satır üretilecek kullanıcılar ve zorunluluk durumları.</param>
+    public async Task<List<ScheduleLane>> GetPeopleLanesAsync(
+        IReadOnlyList<(Guid UserId, string Name, bool IsRequired)> participants,
+        Instant from,
+        Instant to,
+        LocalDate date,
+        string zoneId,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(participants);
+        if (participants.Count == 0) return [];
+
+        var userIds = participants.Select(p => p.UserId).ToList();
+
+        var calendars = await db.Calendars
+            .AsNoTracking()
+            .Where(c => userIds.Contains(c.OwnerUserId) && c.DeletedAt == null)
+            .Select(c => new { c.Id, c.OwnerUserId })
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        var calendarOwner = calendars.ToDictionary(c => c.Id, c => c.OwnerUserId);
+        var calendarIds = calendars.Select(c => c.Id).ToList();
+
+        var occurrences = calendarIds.Count == 0
+            ? []
+            : await ExpandAsync(calendarIds, from, to, ct).ConfigureAwait(false);
+
+        var byUser = occurrences
+            .Where(o => calendarOwner.ContainsKey(o.Source.CalendarId))
+            .ToLookup(o => calendarOwner[o.Source.CalendarId]);
+
+        var lanes = new List<ScheduleLane>(participants.Count);
+
+        foreach (var (userId, name, isRequired) in participants)
+        {
+            var schedule = await workSchedule.GetDayAsync(userId, date, ct).ConfigureAwait(false);
+
+            lanes.Add(new ScheduleLane(
+                userId,
+                name,
+                FreeBusy.Merge(byUser[userId]
+                    .Select(o => new BusyInterval(o.StartUtc, o.EndUtc, o.Source.Availability))),
+                isRequired,
+                ToInstantRange(schedule, date, zoneId)));
+        }
+
+        return lanes;
+    }
+
+    /// <summary>Verilen takvimlerdeki örnekleri pencerede açar.</summary>
+    private async Task<List<Takvim.Core.Recurrence.EventOccurrence>> ExpandAsync(
+        List<Guid> calendarIds, Instant from, Instant to, CancellationToken ct)
+    {
         var roots = await db.Events
             .AsNoTracking()
-            .Include(e => e.Calendar)
             .Where(e => e.DeletedAt == null
                         && e.SeriesId == null
                         && e.Status != EventStatus.Cancelled
@@ -67,22 +147,7 @@ public sealed class SchedulingService(
                 .Where(e => e.SeriesId != null && seriesIds.Contains(e.SeriesId.Value) && e.DeletedAt == null)
                 .ToListAsync(ct).ConfigureAwait(false);
 
-        var occurrences = expander.ExpandMany(roots, exceptions.ToLookup(e => e.SeriesId!.Value), from, to);
-        var byCalendar = occurrences.ToLookup(o => o.Source.CalendarId);
-
-        var schedule = await workSchedule.GetDayAsync(userId, date, ct).ConfigureAwait(false);
-        var hours = ToInstantRange(schedule, date, zoneId);
-
-        return
-        [
-            .. calendars.Select(calendar => new ScheduleLane(
-                calendar.Id,
-                calendar.Name,
-                FreeBusy.Merge(byCalendar[calendar.Id]
-                    .Select(o => new BusyInterval(o.StartUtc, o.EndUtc, o.Source.Availability))),
-                IsRequired: true,
-                WorkingHours: hours))
-        ];
+        return expander.ExpandMany(roots, exceptions.ToLookup(e => e.SeriesId!.Value), from, to);
     }
 
     /// <summary>Mesai aralığını mutlak zamana çevirir; çalışılmayan günde null döner.</summary>

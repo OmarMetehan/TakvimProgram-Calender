@@ -15,7 +15,7 @@
             <span class="marka__ad">Takvim</span>
         </div>
 
-        <TopBar />
+        <TopBar OnOpenPeople="() => _panel = Panel.People" />
 
         <Sidebar OnCreate="() => OpenQuickCreate(null)"
                  OnOpenTrash="() => _panel = Panel.Trash"
@@ -58,9 +58,11 @@
     {
         <EventPreview Occurrence="preview.Occurrence"
                       PositionStyle="@_previewPosition"
-                      OnEdit="() => EditFromPreview()"
+                      Attendees="_previewAttendees"
+                      OnEdit="EditFromPreview"
                       OnDuplicate="Duplicate"
                       OnDelete="DeleteFromPreview"
+                      OnResponded="OnRsvpResponded"
                       OnClose="ClosePreview" />
     }
 
@@ -78,6 +80,7 @@
                      OnSave="SaveDraft"
                      OnDelete="DeleteFromEditor"
                      OnFindTime="OpenSchedulingAssistant"
+                     OnAcceptProposal="AcceptProposal"
                      OnCancel="CloseAll" />
     }
 
@@ -96,6 +99,11 @@
         <ShortcutHelp OnClose="CloseAll" />
     }
 
+    @if (_panel == Panel.People)
+    {
+        <PeoplePanel OnClose="CloseAll" />
+    }
+
     @if (_panel == Panel.WorkSchedule)
     {
         <WorkScheduleDialog Date="_workScheduleDate" OnClose="CloseAll" />
@@ -105,6 +113,7 @@
     {
         <SchedulingAssistant InitialStart="_draft.Start"
                              InitialDurationMinutes="@DraftDurationMinutes"
+                             Attendees="_draft.Attendees"
                              OnPick="ApplyPickedTime"
                              OnClose="() => { _panel = Panel.Editor; StateHasChanged(); }" />
     }
@@ -126,7 +135,7 @@
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
     [Inject] public required IJSRuntime Js { get; set; }
 
-    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling }
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People }
 
     private Panel _panel = Panel.None;
 
@@ -135,6 +144,7 @@
     private EventDraft? _draft;
     private LocalDateTime? _quickCreateStart;
     private LocalDate? _workScheduleDate;
+    private List<Attendee> _previewAttendees = [];
 
     /// <summary>Tekrarlayan bir etkinliğe uygulanacak, kapsam seçimini bekleyen işlem.</summary>
     private Func<SeriesEditScope, Task>? _pendingScope;
@@ -262,7 +272,28 @@
     {
         _preview = activation;
         _previewPosition = await ComputePreviewPosition(activation);
+        _previewAttendees = await LoadAttendeesAsync(activation.Occurrence.SeriesRootId);
+
         StateHasChanged();
+    }
+
+    private async Task<List<Attendee>> LoadAttendeesAsync(Guid eventId)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var attendees = scope.ServiceProvider.GetRequiredService<AttendeeService>();
+
+        return await attendees.GetAsync(eventId);
+    }
+
+    /// <summary>Davete yanıt verildikten sonra hem kart hem ızgara tazelenir.</summary>
+    private async Task OnRsvpResponded()
+    {
+        if (_preview is { } activation)
+        {
+            _previewAttendees = await LoadAttendeesAsync(activation.Occurrence.SeriesRootId);
+        }
+
+        await State.ReloadAsync();
     }
 
     /// <summary>
@@ -344,6 +375,7 @@
     private void ClosePreview()
     {
         _preview = null;
+        _previewAttendees = [];
         StateHasChanged();
     }
 
@@ -419,12 +451,18 @@
         if (draft.IsNew)
         {
             await RunWrite(async events =>
-                await events.CreateAsync(draft.ToInput(CalendarBootstrapper.LocalUserId)),
-                "Etkinlik oluşturuldu.");
+            {
+                var result = await events.CreateAsync(draft.ToInput(State.ActiveUserId));
+                await SyncAttendeesAsync(result.PrimaryEventId, draft, timeChanged: false);
+                return result;
+            }, draft.Attendees.Count > 0 ? "Toplantı oluşturuldu ve davetler gönderildi." : "Etkinlik oluşturuldu.");
 
             CloseAll();
             return;
         }
+
+        // Saat değiştiyse verilmiş yanıtlar geçersizleşir; kaydetmeden önce saptanır.
+        var timeChanged = await HasTimeChangedAsync(draft);
 
         // Var olan bir seride kapsam sorulmalı.
         if (draft.BelongsToSeries)
@@ -432,27 +470,110 @@
             _draft = draft;
             AskScope(isDelete: false, async scope =>
             {
-                await RunWrite(async events => await events.UpdateAsync(
-                    draft.EventId!.Value, draft.RecurrenceId, scope,
-                    draft.ToInput(CalendarBootstrapper.LocalUserId)),
-                    "Etkinlik güncellendi.");
+                await RunWrite(async events =>
+                {
+                    var result = await events.UpdateAsync(
+                        draft.EventId!.Value, draft.RecurrenceId, scope, draft.ToInput(State.ActiveUserId));
+
+                    await SyncAttendeesAsync(result.PrimaryEventId, draft, timeChanged);
+                    return result;
+                }, "Etkinlik güncellendi.");
             });
             return;
         }
 
-        await RunWrite(async events => await events.UpdateAsync(
-            draft.EventId!.Value, null, SeriesEditScope.AllInSeries,
-            draft.ToInput(CalendarBootstrapper.LocalUserId)),
-            "Etkinlik güncellendi.");
+        await RunWrite(async events =>
+        {
+            var result = await events.UpdateAsync(
+                draft.EventId!.Value, null, SeriesEditScope.AllInSeries, draft.ToInput(State.ActiveUserId));
+
+            await SyncAttendeesAsync(result.PrimaryEventId, draft, timeChanged);
+            return result;
+        }, "Etkinlik güncellendi.");
 
         CloseAll();
     }
 
-    private void EditFromPreview()
+    /// <summary>
+    /// Katılımcı listesini kaydeder. Etkinliğin saati değiştiyse verilmiş
+    /// yanıtlar sıfırlanır: kabul edilen şey artık başka bir saat.
+    /// </summary>
+    private async Task SyncAttendeesAsync(Guid eventId, EventDraft draft, bool timeChanged)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var attendees = scope.ServiceProvider.GetRequiredService<AttendeeService>();
+
+        await attendees.SyncAsync(eventId, draft.ToAttendeeInputs(), State.ActiveUserId);
+
+        if (timeChanged && draft.NotifyAttendees && !draft.NotifyOnlyNewAttendees)
+        {
+            await attendees.ResetResponsesAsync(eventId);
+        }
+    }
+
+    /// <summary>Kaydedilecek saat, kayıtlı saatten farklı mı.</summary>
+    private async Task<bool> HasTimeChangedAsync(EventDraft draft)
+    {
+        if (draft.EventId is not { } id) return false;
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+
+        var current = await db.Events
+            .AsNoTracking()
+            .Where(e => e.Id == id)
+            .Select(e => new { e.StartLocal, e.EndLocal })
+            .FirstOrDefaultAsync();
+
+        return current is not null && (current.StartLocal != draft.Start || current.EndLocal != draft.End);
+    }
+
+    /// <summary>
+    /// Bir katılımcının zaman önerisini kabul eder: etkinlik önerilen saate
+    /// taşınır, öneri temizlenir ve diğer yanıtlar sıfırlanır.
+    /// </summary>
+    private async Task AcceptProposal(AttendeeDraft attendee)
+    {
+        if (_draft is not { EventId: { } eventId } draft) return;
+
+        (LocalDateTime Start, LocalDateTime End)? picked;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+            var row = await db.Attendees
+                .FirstOrDefaultAsync(a => a.EventId == eventId && a.Email == attendee.Email);
+
+            if (row is null) return;
+
+            var attendees = scope.ServiceProvider.GetRequiredService<AttendeeService>();
+            picked = await attendees.AcceptProposalAsync(row.Id);
+        }
+
+        if (picked is not { } time) return;
+
+        draft.SetStart(time.Start);
+        draft.SetEnd(time.End);
+        attendee.ProposalSummary = null;
+        attendee.Response = ResponseStatus.Accepted;
+
+        await RunWrite(async events => await events.UpdateAsync(
+            eventId, null, SeriesEditScope.AllInSeries, draft.ToInput(State.ActiveUserId)),
+            "Önerilen saate taşındı.");
+
+        StateHasChanged();
+    }
+
+    private async Task EditFromPreview()
     {
         if (_preview is not { } activation) return;
 
-        _draft = EventDraft.FromOccurrence(activation.Occurrence, State.ZoneId);
+        // Izgara sorgusu katılımcıları yüklemez; düzenleyici için ayrıca okunur.
+        var draft = EventDraft.FromOccurrence(activation.Occurrence, State.ZoneId);
+        draft.Attendees = [.. (await LoadAttendeesAsync(activation.Occurrence.SeriesRootId))
+            .Select(AttendeeDraft.From)];
+
+        _draft = draft;
         _preview = null;
         _panel = Panel.Editor;
         StateHasChanged();
@@ -475,7 +596,7 @@
         _preview = null;
 
         await RunWrite(async events =>
-            await events.CreateAsync(draft.ToInput(CalendarBootstrapper.LocalUserId)),
+            await events.CreateAsync(draft.ToInput(State.ActiveUserId)),
             "Etkinlik çoğaltıldı.");
     }
 
@@ -502,14 +623,14 @@
             AskScope(isDelete: true, async scope =>
             {
                 await RunWrite(async events => await events.DeleteAsync(
-                    id, draft.RecurrenceId, scope, CalendarBootstrapper.LocalUserId),
+                    id, draft.RecurrenceId, scope, State.ActiveUserId),
                     "Etkinlik silindi.");
             });
             return Task.CompletedTask;
         }
 
         return RunWriteAndClose(async events => await events.DeleteAsync(
-            id, null, SeriesEditScope.AllInSeries, CalendarBootstrapper.LocalUserId),
+            id, null, SeriesEditScope.AllInSeries, State.ActiveUserId),
             "Etkinlik silindi.");
     }
 
@@ -521,14 +642,14 @@
             {
                 await RunWrite(async events => await events.DeleteAsync(
                     occurrence.SeriesRootId, occurrence.RecurrenceId, scope,
-                    CalendarBootstrapper.LocalUserId),
+                    State.ActiveUserId),
                     "Etkinlik silindi.");
             });
             return Task.CompletedTask;
         }
 
         return RunWriteAndClose(async events => await events.DeleteAsync(
-            occurrence.EventId, null, SeriesEditScope.AllInSeries, CalendarBootstrapper.LocalUserId),
+            occurrence.EventId, null, SeriesEditScope.AllInSeries, State.ActiveUserId),
             "Etkinlik silindi.");
     }
 
@@ -561,7 +682,7 @@
         draft.SetStart(start);
         draft.SetEnd(end);
 
-        var input = draft.ToInput(CalendarBootstrapper.LocalUserId);
+        var input = draft.ToInput(State.ActiveUserId);
 
         if (occurrence.IsRecurring)
         {

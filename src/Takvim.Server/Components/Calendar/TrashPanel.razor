@@ -82,7 +82,7 @@
 
         await using var scope = Scopes.CreateAsyncScope();
         var query = scope.ServiceProvider.GetRequiredService<CalendarQueryService>();
-        _deleted = await query.GetTrashAsync();
+        _deleted = await query.GetTrashAsync(State.ActiveUserId);
 
         _loading = false;
     }
@@ -92,7 +92,7 @@
         await using (var scope = Scopes.CreateAsyncScope())
         {
             var events = scope.ServiceProvider.GetRequiredService<EventService>();
-            await events.RestoreAsync(eventId, CalendarBootstrapper.LocalUserId);
+            await events.RestoreAsync(eventId, State.ActiveUserId);
         }
 
         await LoadAsync();

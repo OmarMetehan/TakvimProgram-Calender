@@ -34,7 +34,7 @@
     <div>
         <label class="etiket" for="hizli-takvim">Takvim</label>
         <select id="hizli-takvim" class="alan" @bind="_calendarId">
-            @foreach (var calendar in State.Calendars.Where(c => !c.IsReadOnly))
+            @foreach (var calendar in State.WritableCalendars)
             {
                 <option value="@calendar.Id">@calendar.Name</option>
             }

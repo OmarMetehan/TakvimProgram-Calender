@@ -1289,3 +1289,132 @@ kbd {
 
 .zy-oneri__uyari { color: var(--uyari); font-weight: 700; }
 .zy-oneri--secili .zy-oneri__uyari { color: inherit; }
+
+/* ==========================================================================
+   Hesap değiştirici
+   ========================================================================== */
+
+.hesap-dugmesi {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 34px;
+    padding: 0 10px 0 4px;
+    border-radius: 17px;
+    border: 1px solid var(--cizgi);
+    background: var(--zemin);
+    max-width: 190px;
+}
+
+.hesap-dugmesi:hover { background: var(--zemin-2); }
+
+.hesap-ad {
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hesap-baş {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--birincil);
+    color: var(--birincil-metin);
+    font-size: 11px;
+    font-weight: 700;
+    flex: none;
+}
+
+.hesap-baş--kucuk { width: 22px; height: 22px; font-size: 10px; }
+
+.hesap-menu {
+    position: absolute;
+    top: 40px; right: 0;
+    width: 264px;
+    background: var(--zemin);
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak);
+    box-shadow: var(--golge-3);
+    padding: 6px;
+    z-index: 95;
+}
+
+.hesap-menu__baslik {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--metin-3);
+    padding: 4px 8px 6px;
+}
+
+/* ==========================================================================
+   Katılımcılar ve RSVP
+   ========================================================================== */
+
+.katilimci {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--yuvarlak-s);
+}
+
+.katilimci:hover { background: var(--zemin-2); }
+
+.katilimci__ad { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.katilimci__eposta { font-size: 11px; color: var(--metin-3); }
+
+.yanit {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.yanit--kabul   { background: color-mix(in srgb, var(--basari) 16%, transparent); color: var(--basari); }
+.yanit--ret     { background: color-mix(in srgb, var(--tehlike) 16%, transparent); color: var(--tehlike); }
+.yanit--belirsiz{ background: color-mix(in srgb, var(--uyari) 18%, transparent); color: var(--uyari); }
+.yanit--bekliyor{ background: var(--zemin-3); color: var(--metin-2); }
+
+/* Davet yanıt şeridi */
+.rsvp {
+    border: 1px solid var(--birincil);
+    background: var(--birincil-yumusak);
+    border-radius: var(--yuvarlak);
+    padding: 11px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.rsvp__baslik { font-weight: 600; font-size: 13px; }
+.rsvp__dugmeler { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Yanıt sayaçları */
+.yanit-ozeti {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--metin-2);
+}
+
+.yanit-ozeti strong { color: var(--metin); }
+
+/* Yeni zaman önerisi */
+.oneri-kutusu {
+    border: 1px dashed var(--uyari);
+    border-radius: var(--yuvarlak-s);
+    padding: 8px 10px;
+    background: color-mix(in srgb, var(--uyari) 8%, transparent);
+    font-size: 12px;
+}

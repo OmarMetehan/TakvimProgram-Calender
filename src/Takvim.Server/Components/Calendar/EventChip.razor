@@ -42,9 +42,9 @@
         <span class="olay__saat">
             @TurkishFormat.OccurrenceTime(Occurrence.StartLocal, Occurrence.EndLocal, Occurrence.IsAllDay)
         </span>
-        @if (!string.IsNullOrWhiteSpace(Occurrence.Source.LocationText))
+        @if (!string.IsNullOrWhiteSpace(Occurrence.DisplayLocation))
         {
-            <span class="olay__konum">@Occurrence.Source.LocationText</span>
+            <span class="olay__konum">@Occurrence.DisplayLocation</span>
         }
     }
 
@@ -81,6 +81,7 @@
     /// <summary>Çok günlü bir etkinliğin devam eden günü mü.</summary>
     [Parameter] public bool Continues { get; set; }
 
+    /// <summary>Sürüklenebilirlik yetkiye bağlıdır; göremediğini taşıyamazsın.</summary>
     [Parameter] public bool Draggable { get; set; }
 
     [Parameter] public EventCallback<EventActivation> OnActivate { get; set; }
@@ -89,9 +90,11 @@
 
     private ElementReference _element;
 
-    private string DisplayTitle => string.IsNullOrWhiteSpace(Occurrence.Source.Title)
-        ? "(başlıksız)"
-        : Occurrence.Source.Title;
+    /// <summary>
+    /// Gösterilecek başlık. Erişim düzeyi kısıtlıysa "Meşgul" yazar; kaynak
+    /// zaten karartılmıştır, bu ikinci bir güvencedir.
+    /// </summary>
+    private string DisplayTitle => Occurrence.DisplayTitle;
 
     private string CssClass
     {
@@ -127,8 +130,8 @@
         get
         {
             var time = TurkishFormat.OccurrenceTime(Occurrence.StartLocal, Occurrence.EndLocal, Occurrence.IsAllDay);
-            var location = string.IsNullOrWhiteSpace(Occurrence.Source.LocationText)
-                ? "" : "\n" + Occurrence.Source.LocationText;
+            var location = string.IsNullOrWhiteSpace(Occurrence.DisplayLocation)
+                ? "" : "\n" + Occurrence.DisplayLocation;
             return $"{DisplayTitle}\n{time}{location}";
         }
     }

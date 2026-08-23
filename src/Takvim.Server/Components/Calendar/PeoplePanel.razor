@@ -1,0 +1,371 @@
+@* Kişiler ve paylaşım: bu makinedeki hesaplar ve takvim paylaşım seviyeleri. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel" style="width:min(560px, 100vw)" role="dialog" aria-modal="true"
+     aria-label="Kişiler ve paylaşım">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Kişiler ve paylaşım</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        @* ---------------- Hesaplar ---------------- *@
+        <section>
+            <h3 style="font-size:14px;margin:0 0 4px">Bu makinedeki hesaplar</h3>
+            <p style="color:var(--metin-2);margin:0 0 10px">
+                Her hesabın kendi takvimleri ve mesai düzeni vardır. Hesaplar aynı
+                veritabanını paylaşır; davetler doğrudan ulaşır, e-posta gerekmez.
+            </p>
+
+            @foreach (var user in State.Users)
+            {
+                <div style="display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--cizgi);border-radius:var(--yuvarlak);margin-bottom:6px">
+                    <span class="hesap-baş">@Initials(user.DisplayName)</span>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-weight:500">@user.DisplayName</div>
+                        <div style="font-size:12px;color:var(--metin-2)">@user.Email · @user.TimeZoneId</div>
+                    </div>
+
+                    @if (user.Id == State.ActiveUserId)
+                    {
+                        <span class="rozet">Aktif</span>
+                    }
+                    else
+                    {
+                        <button class="dugme" @onclick="() => State.SwitchUserAsync(user.Id)">Geç</button>
+                        @if (State.Users.Count > 1)
+                        {
+                            <button class="dugme dugme--simge dugme--tehlike" title="Hesabı sil"
+                                    aria-label="@user.DisplayName hesabını sil"
+                                    @onclick="() => Delete(user)">🗑</button>
+                        }
+                    }
+                </div>
+            }
+
+            @if (_addingUser)
+            {
+                <div style="border:1px solid var(--birincil);border-radius:var(--yuvarlak);padding:12px;display:flex;flex-direction:column;gap:8px">
+                    <div>
+                        <label class="etiket" for="yeni-ad">Ad soyad</label>
+                        <input id="yeni-ad" class="alan" @bind="_newName" @bind:event="oninput" />
+                    </div>
+                    <div>
+                        <label class="etiket" for="yeni-eposta">E-posta</label>
+                        <input id="yeni-eposta" class="alan" type="email"
+                               @bind="_newEmail" @bind:event="oninput" />
+                    </div>
+
+                    @if (_error is { } error)
+                    {
+                        <div role="alert" style="color:var(--tehlike)">@error</div>
+                    }
+
+                    <div style="display:flex;gap:6px;justify-content:flex-end">
+                        <button class="dugme" @onclick="() => { _addingUser = false; _error = null; }">Vazgeç</button>
+                        <button class="dugme dugme--birincil" @onclick="CreateUser">Ekle</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <button class="dugme" @onclick="() => _addingUser = true">+ Hesap ekle</button>
+            }
+        </section>
+
+        <hr style="border:none;border-top:1px solid var(--cizgi)" />
+
+        @* ---------------- Paylaşım ---------------- *@
+        <section>
+            <h3 style="font-size:14px;margin:0 0 4px">Takvim paylaşımı</h3>
+            <p style="color:var(--metin-2);margin:0 0 10px">
+                Paylaşım seviyesi, karşı tarafın ne göreceğini belirler. Özel
+                işaretli etkinlikler ve gizli kategoriler her seviyede yalnızca
+                "Meşgul" görünür — vekile açıkça izin verilmedikçe.
+            </p>
+
+            <div>
+                <label class="etiket" for="paylas-takvim">Takvim</label>
+                <select id="paylas-takvim" class="alan" @onchange="OnCalendarChanged">
+                    @foreach (var calendar in OwnCalendars)
+                    {
+                        <option value="@calendar.Id" selected="@(calendar.Id == _calendarId)">@calendar.Name</option>
+                    }
+                </select>
+            </div>
+
+            @if (_calendarId != Guid.Empty)
+            {
+                <div style="margin-top:10px">
+                    @if (_shares.Count == 0)
+                    {
+                        <div style="color:var(--metin-3);padding:8px 0">Bu takvim kimseyle paylaşılmamış.</div>
+                    }
+
+                    @foreach (var share in _shares)
+                    {
+                        var grantee = State.Users.FirstOrDefault(u => u.Id == share.GranteeUserId);
+
+                        <div style="border:1px solid var(--cizgi);border-radius:var(--yuvarlak);padding:9px;margin-bottom:6px">
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <span class="hesap-baş hesap-baş--kucuk">@Initials(grantee?.DisplayName)</span>
+                                <span style="flex:1;font-weight:500">@(grantee?.DisplayName ?? "(silinmiş hesap)")</span>
+                                <button class="dugme dugme--simge dugme--tehlike" title="Paylaşımı kaldır"
+                                        aria-label="Paylaşımı kaldır"
+                                        @onclick="() => RemoveShare(share.Id)">✕</button>
+                            </div>
+
+                            <select class="alan" style="margin-top:7px"
+                                    aria-label="Paylaşım seviyesi"
+                                    @onchange="e => ChangeLevel(share.Id, e)">
+                                @foreach (var (level, label) in Levels)
+                                {
+                                    <option value="@level" selected="@(share.Level == level)">@label</option>
+                                }
+                            </select>
+
+                            <label class="liste-ogesi" style="padding-left:0;margin-top:5px">
+                                <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                                       checked="@share.IsDelegate"
+                                       @onchange="e => ToggleDelegate(share.Id, e)" />
+                                <span class="liste-ogesi__ad">Vekil — benim adıma yönetebilir</span>
+                            </label>
+
+                            @if (share.IsDelegate)
+                            {
+                                <label class="liste-ogesi" style="padding-left:22px">
+                                    <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                                           checked="@share.CanSeePrivateItems"
+                                           @onchange="e => TogglePrivate(share.Id, e)" />
+                                    <span class="liste-ogesi__ad">Özel işaretli etkinlikleri de görebilir</span>
+                                </label>
+                            }
+                        </div>
+                    }
+
+                    @if (ShareCandidates.Count > 0)
+                    {
+                        <div style="display:flex;gap:6px;align-items:end;margin-top:8px">
+                            <div style="flex:1">
+                                <label class="etiket" for="paylas-kisi">Kişi ekle</label>
+                                <select id="paylas-kisi" class="alan" @bind="_newGranteeId">
+                                    <option value="@Guid.Empty">Seçin…</option>
+                                    @foreach (var user in ShareCandidates)
+                                    {
+                                        <option value="@user.Id">@user.DisplayName</option>
+                                    }
+                                </select>
+                            </div>
+                            <button class="dugme dugme--birincil" disabled="@(_newGranteeId == Guid.Empty)"
+                                    @onclick="AddShare">Paylaş</button>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private bool _addingUser;
+    private string _newName = "";
+    private string _newEmail = "";
+    private string? _error;
+
+    private Guid _calendarId;
+    private Guid _newGranteeId;
+    private List<CalendarShare> _shares = [];
+
+    private static readonly (SharingLevel Level, string Label)[] Levels =
+    [
+        (SharingLevel.FreeBusy, "1 — Yalnızca meşgul/müsait"),
+        (SharingLevel.TitleLocation, "2 — Başlık ve konum"),
+        (SharingLevel.FullDetails, "3 — Tüm detaylar"),
+        (SharingLevel.CanEdit, "4 — Değişiklik yapabilir"),
+        (SharingLevel.FullControl, "5 — Tam yetki, adıma davet gönderebilir"),
+    ];
+
+    private List<Calendar> OwnCalendars =>
+        [.. State.Calendars.Where(c => c.OwnerUserId == State.ActiveUserId && !c.IsReadOnly)];
+
+    /// <summary>Henüz paylaşılmamış hesaplar; kendisi listede olmaz.</summary>
+    private List<User> ShareCandidates =>
+        [.. State.Users.Where(u => u.Id != State.ActiveUserId && _shares.All(s => s.GranteeUserId != u.Id))];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _calendarId = OwnCalendars.FirstOrDefault()?.Id ?? Guid.Empty;
+        await LoadSharesAsync();
+    }
+
+    private static string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var first = parts[0][..1];
+
+        return parts.Length == 1
+            ? first.ToUpper(TurkishFormat.Culture)
+            : (first + parts[^1][..1]).ToUpper(TurkishFormat.Culture);
+    }
+
+    // ------------------------------------------------------------------
+    // Hesaplar
+    // ------------------------------------------------------------------
+
+    private async Task CreateUser()
+    {
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(_newName) || string.IsNullOrWhiteSpace(_newEmail))
+        {
+            _error = "Ad ve e-posta gerekli.";
+            return;
+        }
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+            var directory = scope.ServiceProvider.GetRequiredService<UserDirectory>();
+            await directory.CreateUserAsync(_newName, _newEmail, State.ZoneId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _error = ex.Message;
+            return;
+        }
+
+        _addingUser = false;
+        _newName = "";
+        _newEmail = "";
+
+        await State.LoadUserContextAsync();
+        State.ShowStatus("Hesap eklendi.");
+    }
+
+    private async Task Delete(User user)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var directory = scope.ServiceProvider.GetRequiredService<UserDirectory>();
+            await directory.DeleteUserAsync(user.Id);
+        }
+
+        await State.LoadUserContextAsync();
+        await LoadSharesAsync();
+        State.ShowStatus($"{user.DisplayName} hesabı silindi.");
+    }
+
+    // ------------------------------------------------------------------
+    // Paylaşım
+    // ------------------------------------------------------------------
+
+    private async Task LoadSharesAsync()
+    {
+        if (_calendarId == Guid.Empty)
+        {
+            _shares = [];
+            return;
+        }
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+
+        _shares = await db.CalendarShares
+            .AsNoTracking()
+            .Where(s => s.CalendarId == _calendarId)
+            .ToListAsync();
+    }
+
+    private async Task OnCalendarChanged(ChangeEventArgs e)
+    {
+        _calendarId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : Guid.Empty;
+        _newGranteeId = Guid.Empty;
+        await LoadSharesAsync();
+    }
+
+    private async Task AddShare()
+    {
+        if (_newGranteeId == Guid.Empty || _calendarId == Guid.Empty) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+            db.CalendarShares.Add(new CalendarShare
+            {
+                CalendarId = _calendarId,
+                GranteeUserId = _newGranteeId,
+                Level = SharingLevel.FreeBusy,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        _newGranteeId = Guid.Empty;
+        await LoadSharesAsync();
+        State.ShowStatus("Takvim paylaşıldı.");
+    }
+
+    private Task ChangeLevel(Guid shareId, ChangeEventArgs e)
+        => UpdateShare(shareId, share =>
+        {
+            if (Enum.TryParse<SharingLevel>(e.Value?.ToString(), out var level)) share.Level = level;
+        });
+
+    private Task ToggleDelegate(Guid shareId, ChangeEventArgs e)
+        => UpdateShare(shareId, share =>
+        {
+            share.IsDelegate = (bool)(e.Value ?? false);
+            if (!share.IsDelegate) share.CanSeePrivateItems = false;
+        });
+
+    private Task TogglePrivate(Guid shareId, ChangeEventArgs e)
+        => UpdateShare(shareId, share => share.CanSeePrivateItems = (bool)(e.Value ?? false));
+
+    private async Task UpdateShare(Guid shareId, Action<CalendarShare> change)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+            var share = await db.CalendarShares.FirstOrDefaultAsync(s => s.Id == shareId);
+            if (share is null) return;
+
+            change(share);
+            share.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        await LoadSharesAsync();
+    }
+
+    private async Task RemoveShare(Guid shareId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+            var share = await db.CalendarShares.FirstOrDefaultAsync(s => s.Id == shareId);
+            if (share is not null)
+            {
+                db.CalendarShares.Remove(share);
+                await db.SaveChangesAsync();
+            }
+        }
+
+        await LoadSharesAsync();
+        State.ShowStatus("Paylaşım kaldırıldı.");
+    }
+}

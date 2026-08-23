@@ -1,0 +1,81 @@
+@* Aktif hesap göstergesi ve değiştirici.
+   Tek makinede birden çok yerel hesap olabildiği için, davetleri ve
+   paylaşımları görmenin yolu hesap değiştirmektir. *@
+
+<div style="position:relative">
+    <button class="hesap-dugmesi" title="Hesap değiştir"
+            aria-haspopup="menu" aria-expanded="@(_open ? "true" : "false")"
+            @onclick="() => _open = !_open">
+        <span class="hesap-baş">@Initials(State.ActiveUser?.DisplayName)</span>
+        <span class="hesap-ad">@(State.ActiveUser?.DisplayName ?? "Hesap yok")</span>
+        <span aria-hidden="true" style="font-size:10px;color:var(--metin-3)">▾</span>
+    </button>
+
+    @if (_open)
+    {
+        <div class="perde" style="background:transparent" @onclick="() => _open = false"></div>
+
+        <div class="hesap-menu" role="menu">
+            <div class="hesap-menu__baslik">Bu makinedeki hesaplar</div>
+
+            @foreach (var user in State.Users)
+            {
+                var active = user.Id == State.ActiveUserId;
+
+                <button type="button" role="menuitem"
+                        class="liste-ogesi @(active ? "liste-ogesi--secili" : "")"
+                        @onclick="() => Switch(user.Id)">
+                    <span class="hesap-baş hesap-baş--kucuk">@Initials(user.DisplayName)</span>
+                    <span class="liste-ogesi__ad">
+                        @user.DisplayName
+                        <span style="display:block;font-size:11px;color:var(--metin-3)">@user.Email</span>
+                    </span>
+                    @if (active)
+                    {
+                        <span aria-hidden="true">✓</span>
+                    }
+                </button>
+            }
+
+            <hr style="border:none;border-top:1px solid var(--cizgi);margin:6px 0" />
+
+            <button type="button" role="menuitem" class="liste-ogesi" @onclick="OpenPeople">
+                <span aria-hidden="true">👥</span>
+                <span class="liste-ogesi__ad">Kişiler ve paylaşım</span>
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Parameter] public EventCallback OnOpenPeople { get; set; }
+
+    private bool _open;
+
+    /// <summary>Ad ve soyadın baş harfleri; Türkçe büyütme kuralıyla.</summary>
+    private static string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var first = parts[0][..1];
+
+        return parts.Length == 1
+            ? first.ToUpper(TurkishFormat.Culture)
+            : (first + parts[^1][..1]).ToUpper(TurkishFormat.Culture);
+    }
+
+    private async Task Switch(Guid userId)
+    {
+        _open = false;
+        await State.SwitchUserAsync(userId);
+    }
+
+    private async Task OpenPeople()
+    {
+        _open = false;
+        await OnOpenPeople.InvokeAsync();
+    }
+}

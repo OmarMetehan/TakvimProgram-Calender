@@ -56,6 +56,18 @@ public sealed class EventDraft
     public List<Guid> CategoryIds { get; set; } = [];
     public List<ReminderInput> Reminders { get; set; } = [];
 
+    /// <summary>Davetliler. Boşsa etkinlik kişiseldir, toplantı değildir.</summary>
+    public List<AttendeeDraft> Attendees { get; set; } = [];
+
+    /// <summary>Etkinliğin organizatörü; katılımcı listesinde ayrı gösterilir.</summary>
+    public Guid? OrganizerUserId { get; set; }
+
+    /// <summary>Kaydederken katılımcılara değişiklik bildirilsin mi.</summary>
+    public bool NotifyAttendees { get; set; } = true;
+
+    /// <summary>Yalnızca yeni eklenen katılımcılara bildir.</summary>
+    public bool NotifyOnlyNewAttendees { get; set; }
+
     // ------------------------------------------------------------------
     // Kurulum
     // ------------------------------------------------------------------
@@ -110,6 +122,8 @@ public sealed class EventDraft
             IsForwardable = source.IsForwardable,
             CategoryIds = [.. source.Categories.Select(c => c.CategoryId)],
             Reminders = [.. source.Reminders.Select(r => new ReminderInput(r.MinutesBefore, r.Channel))],
+            Attendees = [.. source.Attendees.Select(AttendeeDraft.From)],
+            OrganizerUserId = source.OrganizerUserId,
             CustomRecurrenceRule = source.RecurrenceRule,
             RecurrencePreset = source.RecurrenceRule is null ? RecurrencePreset.None : RecurrencePreset.Custom,
         };
@@ -169,6 +183,15 @@ public sealed class EventDraft
         var problems = new List<string>();
 
         if (CalendarId == Guid.Empty) problems.Add("Bir takvim seçin.");
+
+        var duplicate = Attendees
+            .GroupBy(a => a.Email.Trim().ToLowerInvariant())
+            .FirstOrDefault(g => g.Count() > 1);
+
+        if (duplicate is not null) problems.Add($"Aynı kişi iki kez eklenmiş: {duplicate.Key}");
+
+        var invalid = Attendees.FirstOrDefault(a => !a.Email.Contains('@', StringComparison.Ordinal));
+        if (invalid is not null) problems.Add($"Geçersiz e-posta: {invalid.Email}");
         if (End <= Start) problems.Add("Bitiş, başlangıçtan sonra olmalı.");
 
         if (!RecurrenceRuleBuilder.TryParse(EffectiveRecurrenceRule, out var error) && error is not null)
@@ -182,6 +205,11 @@ public sealed class EventDraft
 
         return problems;
     }
+
+    /// <summary>Katılımcıları servise verilecek biçime çevirir.</summary>
+    public IReadOnlyList<AttendeeInput> ToAttendeeInputs()
+        => [.. Attendees.Select(a => new AttendeeInput(
+            a.Email, a.DisplayName, a.UserId, a.Role, a.CanEdit, a.CanInviteOthers, a.CanSeeGuestList))];
 
     public EventInput ToInput(Guid actorUserId) => new()
     {
@@ -245,5 +273,54 @@ public sealed class EventDraft
         return TurkishFormat.TryParseTime(time, out var parsedTime)
             ? day + parsedTime
             : day.At(new LocalTime(9, 0));
+    }
+}
+
+/// <summary>
+/// Düzenleyicideki katılımcı satırı. Var olan bir katılımcının yanıtını da
+/// taşır; liste yeniden kurulduğunda yanıtlar kaybolmaz.
+/// </summary>
+public sealed class AttendeeDraft
+{
+    public Guid? UserId { get; set; }
+    public required string Email { get; set; }
+    public required string DisplayName { get; set; }
+
+    public AttendeeRole Role { get; set; } = AttendeeRole.Required;
+
+    public bool CanEdit { get; set; }
+    public bool CanInviteOthers { get; set; }
+    public bool CanSeeGuestList { get; set; } = true;
+
+    /// <summary>Var olan bir katılımcıysa verdiği yanıt; yeni eklenende beklemede.</summary>
+    public ResponseStatus Response { get; set; } = ResponseStatus.NeedsAction;
+
+    public string? ResponseComment { get; set; }
+
+    /// <summary>Bekleyen zaman önerisinin özeti; varsa arayüzde gösterilir.</summary>
+    public string? ProposalSummary { get; set; }
+
+    /// <summary>Bu makinede hesabı olmayan biri: davet ona ulaşmaz.</summary>
+    public bool IsExternal => UserId is null;
+
+    public static AttendeeDraft From(Attendee attendee)
+    {
+        ArgumentNullException.ThrowIfNull(attendee);
+
+        return new AttendeeDraft
+        {
+            UserId = attendee.UserId,
+            Email = attendee.Email,
+            DisplayName = attendee.DisplayName,
+            Role = attendee.Role,
+            CanEdit = attendee.CanEdit,
+            CanInviteOthers = attendee.CanInviteOthers,
+            CanSeeGuestList = attendee.CanSeeGuestList,
+            Response = attendee.Response,
+            ResponseComment = attendee.ResponseComment,
+            ProposalSummary = attendee.ProposedStartLocal is { } start
+                ? $"{start:dd.MM.yyyy HH:mm}"
+                : null,
+        };
     }
 }

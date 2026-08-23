@@ -1,5 +1,6 @@
 using NodaTime;
 using Takvim.Core.Domain;
+using Takvim.Core.Permissions;
 
 namespace Takvim.Core.Recurrence;
 
@@ -9,7 +10,7 @@ namespace Takvim.Core.Recurrence;
 /// Tekil etkinlikler de tek örneklik bir dizi olarak buradan geçer, böylece
 /// görünüm kodu tekrarlayan ve tekrarlamayan ayrımı yapmak zorunda kalmaz.
 /// </summary>
-public sealed class EventOccurrence
+public sealed record EventOccurrence
 {
     /// <summary>
     /// Bu örneğin verisini taşıyan satır. Sapmış bir örnekte istisna satırı,
@@ -34,6 +35,31 @@ public sealed class EventOccurrence
 
     /// <summary>Bu örnek seriden sapmış mı (taşınmış veya alanları değiştirilmiş).</summary>
     public bool IsException { get; init; }
+
+    /// <summary>
+    /// Bakan kullanıcının bu örnekte ne görebildiği. Varsayılan tam erişimdir:
+    /// izin çözümlemesi yapılmayan yollarda (kendi takvimi, dışa aktarma) örnek
+    /// olduğu gibi kullanılır.
+    /// <para>
+    /// Kısıtlı örneklerde sorgu katmanı <see cref="Source"/> alanını zaten
+    /// karartılmış bir kopyayla değiştirir; bu alan arayüzün ayrıca doğru
+    /// davranabilmesi içindir.
+    /// </para>
+    /// </summary>
+    public EventAccess Access { get; init; } =
+        new(DetailLevel.FullDetails, CanEdit: true, CanInviteOnBehalf: true);
+
+    /// <summary>Gösterilecek başlık; erişim düzeyine göre karartılmış olabilir.</summary>
+    public string DisplayTitle => CalendarAccess.TitleFor(Access, Source.Title);
+
+    /// <summary>Gösterilecek konum; başlık seviyesinin altında gizlenir.</summary>
+    public string? DisplayLocation => CalendarAccess.LocationFor(Access, Source.LocationText);
+
+    /// <summary>Açıklama, katılımcılar ve ekler gösterilebilir mi.</summary>
+    public bool CanSeeDetails => Access.CanSeeDetails;
+
+    /// <summary>Bakan kullanıcı bu örneği düzenleyebilir mi.</summary>
+    public bool CanEdit => Access.CanEdit;
 
     /// <summary>Örnek bir seriye ait mi.</summary>
     public bool IsRecurring => RecurrenceId is not null;

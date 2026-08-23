@@ -31,7 +31,7 @@
         <div>
             <label class="etiket" for="olay-takvim">Takvim</label>
             <select id="olay-takvim" class="alan" @bind="Draft.CalendarId">
-                @foreach (var calendar in State.Calendars.Where(c => !c.IsReadOnly))
+                @foreach (var calendar in State.WritableCalendars)
                 {
                     <option value="@calendar.Id">@calendar.Name</option>
                 }
@@ -146,6 +146,10 @@
                 <div style="font-size:12px;color:var(--metin-2);margin-top:5px">@Draft.RecurrenceDescription</div>
             }
         </div>
+
+        @* ---------- Katılımcılar ---------- *@
+
+        <AttendeeSection Draft="Draft" OnAcceptProposal="OnAcceptProposal" />
 
         @* ---------- Konum ---------- *@
 
@@ -299,6 +303,9 @@
 
     /// <summary>Zamanlama yardımcısını açar; seçilen aralık taslağa geri yazılır.</summary>
     [Parameter] public EventCallback<EventDraft> OnFindTime { get; set; }
+
+    /// <summary>Bir katılımcının zaman önerisi kabul edildiğinde.</summary>
+    [Parameter] public EventCallback<AttendeeDraft> OnAcceptProposal { get; set; }
 
     private List<string> _problems = [];
 

@@ -24,6 +24,9 @@ internal sealed class TestDatabase : IDisposable
     public EventService Events { get; }
     public CalendarQueryService Query { get; }
     public UndoService Undo { get; }
+    public CalendarPermissions Permissions { get; }
+    public AttendeeService Attendees { get; }
+    public UserDirectory Directory { get; }
     public ReminderService Reminders { get; }
     public TimeZoneService Zones { get; } = new();
     public RecurrenceExpander Expander { get; }
@@ -46,9 +49,12 @@ internal sealed class TestDatabase : IDisposable
 
         Expander = new RecurrenceExpander(Zones);
         Events = new EventService(Db, Zones, Expander, Clock);
-        Query = new CalendarQueryService(Db, Expander);
+        Permissions = new CalendarPermissions(Db);
+        Query = new CalendarQueryService(Db, Expander, Permissions);
         Undo = new UndoService(Db);
         Reminders = new ReminderService(Db, Expander, Clock);
+        Attendees = new AttendeeService(Db, Clock);
+        Directory = new UserDirectory(Db);
 
         var user = new User { DisplayName = "Test Kullanıcı", Email = "test@ornek.local" };
         var calendar = new Calendar { Name = "Kişisel", OwnerUserId = user.Id };
@@ -90,7 +96,7 @@ internal sealed class TestDatabase : IDisposable
     /// <summary>Bir aralıktaki örneklerin başlangıçlarını okunur biçimde döker.</summary>
     public async Task<string[]> StartsAsync(string from, string to)
     {
-        var occurrences = await Query.GetOccurrencesAsync(Utc(from), Utc(to)).ConfigureAwait(false);
+        var occurrences = await Query.GetOccurrencesAsync(UserId, Utc(from), Utc(to)).ConfigureAwait(false);
         return [.. occurrences
             .OrderBy(o => o.StartUtc)
             .Select(o => o.StartLocal.ToString("uuuu-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture))];
@@ -98,12 +104,52 @@ internal sealed class TestDatabase : IDisposable
 
     public async Task<string[]> TitlesAsync(string from, string to)
     {
-        var occurrences = await Query.GetOccurrencesAsync(Utc(from), Utc(to)).ConfigureAwait(false);
+        var occurrences = await Query.GetOccurrencesAsync(UserId, Utc(from), Utc(to)).ConfigureAwait(false);
         return [.. occurrences.OrderBy(o => o.StartUtc).Select(o => o.Source.Title)];
     }
 
     /// <summary>EF'in izleme önbelleğini boşaltır; yazma sonrası okumanın gerçekten diskten geldiğini garantiler.</summary>
     public void Detach() => Db.ChangeTracker.Clear();
+
+    /// <summary>İkinci bir yerel kullanıcı ve ona ait bir takvim açar.</summary>
+    public (Guid UserId, Guid CalendarId) AddUser(string name, string email)
+    {
+        var user = new User { DisplayName = name, Email = email };
+        var calendar = new Calendar { Name = $"{name} — Kişisel", OwnerUserId = user.Id };
+
+        Db.Users.Add(user);
+        Db.Calendars.Add(calendar);
+        Db.SaveChanges();
+        Detach();
+
+        return (user.Id, calendar.Id);
+    }
+
+    /// <summary>Bir takvimi başka bir kullanıcıyla verilen seviyede paylaşır.</summary>
+    public void Share(
+        Guid calendarId,
+        Guid granteeUserId,
+        Takvim.Core.Permissions.SharingLevel level,
+        bool isDelegate = false,
+        bool canSeePrivate = false)
+    {
+        Db.CalendarShares.Add(new CalendarShare
+        {
+            CalendarId = calendarId,
+            GranteeUserId = granteeUserId,
+            Level = level,
+            IsDelegate = isDelegate,
+            CanSeePrivateItems = canSeePrivate,
+        });
+
+        Db.SaveChanges();
+        Detach();
+    }
+
+    /// <summary>Belirli bir kullanıcının gözünden aralıktaki örnekler.</summary>
+    public Task<List<Takvim.Core.Recurrence.EventOccurrence>> SeenByAsync(
+        Guid userId, string from, string to)
+        => Query.GetOccurrencesAsync(userId, Utc(from), Utc(to));
 
     public void Dispose()
     {

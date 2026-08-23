@@ -30,7 +30,7 @@ public class DeleteAndUndoTests : IDisposable
 
         Assert.Empty(await _t.StartsAsync("2026-03-01 00:00", "2026-03-05 00:00"));
 
-        var trash = await _t.Query.GetTrashAsync();
+        var trash = await _t.Query.GetTrashAsync(_t.UserId);
         Assert.Single(trash);
         Assert.Equal("Tekil", trash[0].Title);
         // Satır silinmez, yalnızca işaretlenir.
@@ -126,7 +126,7 @@ public class DeleteAndUndoTests : IDisposable
         _t.Detach();
 
         Assert.Equal(["2026-03-02 09:00"], await _t.StartsAsync("2026-03-01 00:00", "2026-03-05 00:00"));
-        Assert.Empty(await _t.Query.GetTrashAsync());
+        Assert.Empty(await _t.Query.GetTrashAsync(_t.UserId));
     }
 
     [Fact]
@@ -140,13 +140,13 @@ public class DeleteAndUndoTests : IDisposable
         // 29 gün sonra hâlâ durur.
         _t.Clock.Advance(Duration.FromDays(29));
         Assert.Equal(0, await _t.Events.PurgeTrashAsync());
-        Assert.Single(await _t.Query.GetTrashAsync());
+        Assert.Single(await _t.Query.GetTrashAsync(_t.UserId));
 
         // 31 gün sonra temizlenir.
         _t.Clock.Advance(Duration.FromDays(2));
         Assert.Equal(1, await _t.Events.PurgeTrashAsync());
         _t.Detach();
-        Assert.Empty(await _t.Query.GetTrashAsync());
+        Assert.Empty(await _t.Query.GetTrashAsync(_t.UserId));
     }
 
     // ==================================================================

@@ -55,8 +55,8 @@ src/
 tests/
 ├─ Takvim.Core.Tests/   179 test — tekrarlama, zaman dilimi, ICS, ayrıştırıcı,
 │                       tatiller, izin motoru, müsaitlik hesabı
-└─ Takvim.Data.Tests/   63 test — seri düzenleme, silme, geri alma, hatırlatıcılar,
-                        çalışma düzeni, zamanlama
+└─ Takvim.Data.Tests/   109 test — seri düzenleme, silme, geri alma, hatırlatıcılar,
+                        çalışma düzeni, zamanlama, paylaşım yalıtımı, RSVP
 ```
 
 Veri katmanı testleri gerçek SQLite üzerinde çalışır (bellek içi dosya), EF Core'un
@@ -91,6 +91,12 @@ Bir ülke yaz saati kuralını değiştirdiğinde kayıtlı etkinlikler kaymaz �
 gizliliği birbirini kesen dört boyuttur. Tüm kombinasyonların cevabı kod yazılmadan
 önce [docs/izin-modeli.md](docs/izin-modeli.md) dosyasında tabloya döküldü.
 
+Uygulaması `Takvim.Core/Permissions` içindedir ve **tek kapı kuralı** geçerlidir:
+etkinlik okuyan her yol `CalendarQueryService` üzerinden geçer, orada her örnek
+izin çözümlemesinden geçirilir. Görünmemesi gerekenler elenir, kısıtlı olanların
+kaynağı **karartılmış bir kopyayla değiştirilir** — arayüz yanlışlıkla ham
+başlığı okusa bile gizli veri sızmaz. Bu davranış testlerle korunur.
+
 ---
 
 ## Faz 2 — durum
@@ -102,23 +108,33 @@ gizliliği birbirini kesen dört boyuttur. Tüm kombinasyonların cevabı kod ya
 | Çalışma konumu (ofis / evden / şube), gün başlığında görünür | ✅ |
 | Tüm etkinlik durumları (meşgul, müsait, belirsiz, ofis dışı, odak, başka yerde) | ✅ |
 | Denetim kaydı | ✅ (Faz 1) |
-| Zamanlama yardımcısı — müsaitlik ızgarası ve önerilen aralıklar | ✅ takvimler arası |
-| Katılımcılar, RSVP, yanıt takibi, yeni zaman önerme | ⏸ karar bekliyor |
-| Takvim paylaşımı ve izin seviyeleri arayüzü | ⏸ karar bekliyor |
+| Zamanlama yardımcısı — katılımcıların müsaitliği ve önerilen aralıklar | ✅ |
+| Katılımcılar, zorunlu/isteğe bağlı ayrımı, katılımcı yetkileri | ✅ |
+| RSVP (katılacağım / belki / katılmayacağım), açıklama notu, katılım şekli | ✅ |
+| Yanıt takip paneli, sayaçlı özet | ✅ |
+| Yeni zaman önerme, organizatörün tek tıkla kabulü | ✅ |
+| Takvim paylaşımı, beş kademeli izin seviyesi | ✅ |
+| Vekil erişimi ve özel öğelerin vekilden gizlenmesi | ✅ |
 | CalDAV sunucusu | ⏸ |
+| E-posta ile davet (iTIP) | ⏸ tasarım gereği yok |
 
-**Neden duruyor:** Katılımcı, RSVP, paylaşım ve vekil erişimi çok kullanıcılı
-olmayı gerektirir. Kullanıcıların nasıl var olacağı ve davetlerin nasıl
-taşınacağı — tek makinede yerel hesaplar mı, ortak bir sunucu mu, e-posta
-üzerinden iTIP mi — tasarımı baştan sona değiştiren bir karardır. İzin motoru,
-müsaitlik hesabı ve etkinlik şemasındaki ilgili sütunlar bu kararın her
-sonucunda kullanılacak biçimde hazır; taşıma katmanı seçildiğinde üstüne
-kurulabilir.
+### Çok kullanıcılı model
 
-Zamanlama yardımcısı şu an **kendi takvimleriniz arasında** çalışıyor: iş ve
-kişisel takvimin müsaitliğini yan yana gösterip uygun aralık öneriyor. Aynı
-ızgara, satırlar kişilere dönüştüğünde katılımcılar için de çalışacak —
-`ScheduleLane` satırın kullanıcı mı takvim mi olduğunu bilmiyor.
+Uygulama **tek makinede, yerel hesaplarla** çalışır. Bu seçimin iki somut sonucu var:
+
+**Paylaşımlı model, kopya modeli değil.** Tek veritabanı olduğu için davet,
+katılımcının takvimine ayrı bir kopya yazmaz: tek bir etkinlik satırı vardır ve
+katılımcılar ona bağlanır. Bir kişinin yanıtı ötekilerde anında görünür,
+kopyalar arasında eşitleme diye bir sorun yoktur. E-posta ile davete (iTIP)
+geçilirse her katılımcının kendi kopyası gerekir; `Attendee` tablosu o zaman
+kopyalar arası eşleştirmeyi taşıyacak biçimde genişletilir.
+
+**Hesap değiştirerek çalışılır.** Üst çubuktaki hesap düğmesinden geçiş yapılır;
+davetleri, paylaşımları ve yanıtları görmenin yolu budur. Yeni hesap açmak
+kendisine bir kişisel takvim ve varsayılan mesai düzeni de kurar.
+
+Bu makinede hesabı olmayan biri de e-posta adresiyle davet edilebilir, ancak
+davet ona ulaşmaz ve müsaitliği bilinemez; arayüz bunu açıkça belirtir.
 
 ---
 

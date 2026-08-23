@@ -54,6 +54,9 @@ public static class TakvimHost
         builder.Services.AddScoped<ReminderService>();
         builder.Services.AddScoped<WorkScheduleService>();
         builder.Services.AddScoped<SchedulingService>();
+        builder.Services.AddScoped<CalendarPermissions>();
+        builder.Services.AddScoped<AttendeeService>();
+        builder.Services.AddScoped<UserDirectory>();
         builder.Services.AddScoped<CalendarBootstrapper>();
 
         // Hatırlatıcı zamanlayıcısı uygulama ömrü boyunca tek örnektir; sonucu

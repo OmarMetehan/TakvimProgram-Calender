@@ -1,0 +1,203 @@
+@* Davet yanıt şeridi. Yalnızca aktif kullanıcı bu etkinliğe davetliyse görünür. *@
+
+@if (_me is not null)
+{
+    <div class="rsvp">
+        <div class="rsvp__baslik">
+            @(_me.Response == ResponseStatus.NeedsAction
+                ? "Bu toplantıya davetlisiniz"
+                : $"Yanıtınız: {AttendeeService.Describe(_me.Response)}")
+        </div>
+
+        @if (_proposing)
+        {
+            <div style="display:flex;flex-direction:column;gap:7px">
+                <div style="font-size:12px;color:var(--metin-2)">
+                    Reddetmek yerine başka bir saat önerin. Organizatör tek tıkla kabul edebilir.
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px">
+                    <input class="alan" type="date" value="@_proposalDate"
+                           aria-label="Önerilen tarih"
+                           @onchange="e => _proposalDate = e.Value?.ToString() ?? _proposalDate" />
+                    <input class="alan" type="time" style="width:106px" value="@_proposalStart"
+                           aria-label="Önerilen başlangıç"
+                           @onchange="e => _proposalStart = e.Value?.ToString() ?? _proposalStart" />
+                    <input class="alan" type="time" style="width:106px" value="@_proposalEnd"
+                           aria-label="Önerilen bitiş"
+                           @onchange="e => _proposalEnd = e.Value?.ToString() ?? _proposalEnd" />
+                </div>
+
+                <input class="alan" placeholder="Not (isteğe bağlı)"
+                       @bind="_comment" @bind:event="oninput" />
+
+                @if (_error is { } proposalError)
+                {
+                    <div role="alert" style="color:var(--tehlike);font-size:12px">@proposalError</div>
+                }
+
+                <div class="rsvp__dugmeler">
+                    <button class="dugme" @onclick="() => { _proposing = false; _error = null; }">Vazgeç</button>
+                    <button class="dugme dugme--birincil" @onclick="SubmitProposal">Öneriyi gönder</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            @if (_me.HasProposal)
+            {
+                <div class="oneri-kutusu">
+                    Önerdiğiniz saat: <strong>@ProposalText</strong> — organizatörün yanıtı bekleniyor.
+                    <button class="dugme dugme--sade" style="height:24px;font-size:12px"
+                            @onclick="WithdrawProposal">Geri çek</button>
+                </div>
+            }
+
+            <input class="alan" placeholder="Yanıtınıza not ekleyin (isteğe bağlı)"
+                   @bind="_comment" @bind:event="oninput" />
+
+            <div style="display:flex;gap:6px;align-items:center">
+                <span style="font-size:12px;color:var(--metin-2)">Katılım:</span>
+                <div class="gorunum-secici">
+                    <button type="button" aria-current="@Pressed(_mode == AttendanceMode.InPerson)"
+                            @onclick="() => _mode = AttendanceMode.InPerson">Yüz yüze</button>
+                    <button type="button" aria-current="@Pressed(_mode == AttendanceMode.Online)"
+                            @onclick="() => _mode = AttendanceMode.Online">Çevrimiçi</button>
+                </div>
+            </div>
+
+            <div class="rsvp__dugmeler">
+                <button class="dugme dugme--birincil" @onclick="() => Respond(ResponseStatus.Accepted)">
+                    Katılacağım
+                </button>
+                <button class="dugme" @onclick="() => Respond(ResponseStatus.Tentative)">Belki</button>
+                <button class="dugme dugme--tehlike" @onclick="() => Respond(ResponseStatus.Declined)">
+                    Katılmayacağım
+                </button>
+                <span style="flex:1"></span>
+                <button class="dugme dugme--sade" @onclick="StartProposal">Yeni zaman öner</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter, EditorRequired] public required EventOccurrence Occurrence { get; set; }
+
+    /// <summary>Yanıt verildikten sonra görünümün tazelenmesi için.</summary>
+    [Parameter] public EventCallback OnResponded { get; set; }
+
+    private Attendee? _me;
+    private string _comment = "";
+    private AttendanceMode _mode = AttendanceMode.InPerson;
+
+    private bool _proposing;
+    private string _proposalDate = "";
+    private string _proposalStart = "";
+    private string _proposalEnd = "";
+    private string? _error;
+
+    private Guid EventId => Occurrence.SeriesRootId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+
+        _me = await db.Attendees
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.EventId == EventId && a.UserId == State.ActiveUserId);
+
+        if (_me is not null)
+        {
+            _comment = _me.ResponseComment ?? "";
+            if (_me.Mode != AttendanceMode.Unspecified) _mode = _me.Mode;
+        }
+    }
+
+    private static string Pressed(bool value) => value ? "true" : "false";
+
+    private string ProposalText => _me?.ProposedStartLocal is { } start && _me.ProposedEndLocal is { } end
+        ? $"{TurkishFormat.Date(start.Date)} {TurkishFormat.TimeRange(start, end)}"
+        : "";
+
+    private async Task Respond(ResponseStatus status)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var attendees = scope.ServiceProvider.GetRequiredService<AttendeeService>();
+            await attendees.RespondAsync(EventId, State.ActiveUserId, status, _comment, _mode);
+        }
+
+        State.ShowStatus($"Yanıtınız kaydedildi: {AttendeeService.Describe(status)}");
+        await OnResponded.InvokeAsync();
+    }
+
+    private void StartProposal()
+    {
+        // Öneri, mevcut saatin bir saat sonrasıyla başlar; kullanıcı oradan düzeltir.
+        var start = Occurrence.StartLocal.PlusHours(1);
+        var length = Occurrence.EndLocal - Occurrence.StartLocal;
+
+        _proposalDate = start.Date.ToString("uuuu-MM-dd", CultureInfo.InvariantCulture);
+        _proposalStart = start.TimeOfDay.ToString("HH:mm", CultureInfo.InvariantCulture);
+        _proposalEnd = (start + length).TimeOfDay.ToString("HH:mm", CultureInfo.InvariantCulture);
+
+        _proposing = true;
+        _error = null;
+    }
+
+    private async Task SubmitProposal()
+    {
+        if (!DateTime.TryParseExact(_proposalDate, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var parsedDate))
+        {
+            _error = "Geçerli bir tarih seçin.";
+            return;
+        }
+
+        if (!TurkishFormat.TryParseTime(_proposalStart, out var start)
+            || !TurkishFormat.TryParseTime(_proposalEnd, out var end))
+        {
+            _error = "Geçerli saatler girin.";
+            return;
+        }
+
+        var date = LocalDate.FromDateTime(parsedDate);
+        var startLocal = date + start;
+        var endLocal = date + end;
+
+        // Gece aşan öneri ertesi güne taşar.
+        if (endLocal <= startLocal) endLocal = endLocal.PlusDays(1);
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var attendees = scope.ServiceProvider.GetRequiredService<AttendeeService>();
+            await attendees.ProposeNewTimeAsync(EventId, State.ActiveUserId, startLocal, endLocal, _comment);
+        }
+
+        _proposing = false;
+        _error = null;
+
+        State.ShowStatus("Yeni zaman önerildi.");
+        await OnResponded.InvokeAsync();
+    }
+
+    private async Task WithdrawProposal()
+    {
+        if (_me is null) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var attendees = scope.ServiceProvider.GetRequiredService<AttendeeService>();
+            await attendees.WithdrawProposalAsync(_me.Id);
+        }
+
+        State.ShowStatus("Öneri geri çekildi.");
+        await OnResponded.InvokeAsync();
+    }
+}

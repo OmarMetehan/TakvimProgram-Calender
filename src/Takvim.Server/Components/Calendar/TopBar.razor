@@ -48,6 +48,8 @@
         </select>
     }
 
+    <UserSwitcher OnOpenPeople="OnOpenPeople" />
+
     <button class="dugme dugme--simge" title="Görünüm ayarları" aria-label="Görünüm ayarları"
             aria-expanded="@(_settingsOpen ? "true" : "false")"
             @onclick="() => _settingsOpen = !_settingsOpen">⚙</button>
@@ -107,6 +109,9 @@
     [CascadingParameter] public required CalendarUiState State { get; set; }
 
     [Inject] public required IJSRuntime Js { get; set; }
+
+    /// <summary>Hesap menüsünden kişiler paneline geçiş.</summary>
+    [Parameter] public EventCallback OnOpenPeople { get; set; }
 
     private bool _settingsOpen;
     private string _theme = "acik";

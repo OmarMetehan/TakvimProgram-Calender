@@ -1,0 +1,259 @@
+@* Etkinlik düzenleyicisindeki katılımcı bölümü: kişi ekleme, zorunlu/isteğe
+   bağlı ayrımı, yetkiler ve yanıt takibi. *@
+
+<div>
+    <span class="etiket">
+        Katılımcılar
+        @if (Draft.Attendees.Count > 0)
+        {
+            <span style="font-weight:400;color:var(--metin-3)"> · @Draft.Attendees.Count kişi</span>
+        }
+    </span>
+
+    @* ---------------- Yanıt özeti ---------------- *@
+    @if (!Draft.IsNew && Draft.Attendees.Count > 0)
+    {
+        <div class="yanit-ozeti" style="margin-bottom:8px">
+            <span><strong>@Count(ResponseStatus.Accepted)</strong> kabul</span>
+            <span><strong>@Count(ResponseStatus.Declined)</strong> ret</span>
+            <span><strong>@Count(ResponseStatus.Tentative)</strong> belirsiz</span>
+            <span><strong>@Count(ResponseStatus.NeedsAction)</strong> yanıt yok</span>
+        </div>
+    }
+
+    @* ---------------- Liste ---------------- *@
+    @if (Draft.OrganizerUserId is { } organizerId)
+    {
+        var organizer = State.Users.FirstOrDefault(u => u.Id == organizerId);
+        if (organizer is not null)
+        {
+            <div class="katilimci">
+                <span class="hesap-baş hesap-baş--kucuk">@Initials(organizer.DisplayName)</span>
+                <span class="katilimci__ad">
+                    @organizer.DisplayName
+                    <span class="katilimci__eposta">@organizer.Email</span>
+                </span>
+                <span class="rozet">Organizatör</span>
+            </div>
+        }
+    }
+
+    @foreach (var attendee in Draft.Attendees)
+    {
+        <div class="katilimci">
+            <span class="hesap-baş hesap-baş--kucuk"
+                  style="@(attendee.IsExternal ? "background:var(--metin-3)" : "")">
+                @Initials(attendee.DisplayName)
+            </span>
+
+            <span class="katilimci__ad">
+                @attendee.DisplayName
+                <span class="katilimci__eposta">
+                    @attendee.Email
+                    @if (attendee.IsExternal)
+                    {
+                        <span title="Bu makinede hesabı yok; davet kendisine ulaşmaz"> · dış kişi</span>
+                    }
+                </span>
+            </span>
+
+            @if (!Draft.IsNew)
+            {
+                <span class="yanit @ResponseClass(attendee.Response)"
+                      title="@(attendee.ResponseComment ?? AttendeeService.Describe(attendee.Response))">
+                    @AttendeeService.Describe(attendee.Response)
+                </span>
+            }
+
+            <select class="alan" style="width:112px;height:28px;font-size:12px"
+                    aria-label="@attendee.DisplayName rolü"
+                    @onchange="e => SetRole(attendee, e)">
+                <option value="@AttendeeRole.Required" selected="@(attendee.Role == AttendeeRole.Required)">Zorunlu</option>
+                <option value="@AttendeeRole.Optional" selected="@(attendee.Role == AttendeeRole.Optional)">İsteğe bağlı</option>
+            </select>
+
+            <button class="dugme dugme--simge" title="Yetkiler"
+                    aria-label="@attendee.DisplayName yetkileri"
+                    @onclick="() => Toggle(attendee)">⋯</button>
+
+            <button class="dugme dugme--simge dugme--tehlike" title="Çıkar"
+                    aria-label="@attendee.DisplayName katılımcısını çıkar"
+                    @onclick="() => Draft.Attendees.Remove(attendee)">✕</button>
+        </div>
+
+        @if (_expanded == attendee)
+        {
+            <div style="padding:4px 8px 10px 38px;display:flex;flex-direction:column;gap:2px">
+                <label class="liste-ogesi" style="padding-left:0">
+                    <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                           checked="@attendee.CanEdit"
+                           @onchange="e => attendee.CanEdit = (bool)(e.Value ?? false)" />
+                    <span class="liste-ogesi__ad">Etkinliği düzenleyebilir</span>
+                </label>
+                <label class="liste-ogesi" style="padding-left:0">
+                    <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                           checked="@attendee.CanInviteOthers"
+                           @onchange="e => attendee.CanInviteOthers = (bool)(e.Value ?? false)" />
+                    <span class="liste-ogesi__ad">Başkasını davet edebilir</span>
+                </label>
+                <label class="liste-ogesi" style="padding-left:0">
+                    <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                           checked="@attendee.CanSeeGuestList"
+                           @onchange="e => attendee.CanSeeGuestList = (bool)(e.Value ?? false)" />
+                    <span class="liste-ogesi__ad">Katılımcı listesini görebilir</span>
+                </label>
+
+                @if (attendee.ProposalSummary is { } proposal)
+                {
+                    <div class="oneri-kutusu" style="margin-top:6px">
+                        Yeni zaman önerdi: <strong>@proposal</strong>
+                        <button class="dugme dugme--sade" style="height:24px;font-size:12px"
+                                @onclick="() => OnAcceptProposal.InvokeAsync(attendee)">Kabul et</button>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @* ---------------- Ekleme ---------------- *@
+    <div style="position:relative;margin-top:6px">
+        <input class="alan"
+               placeholder="Ad ya da e-posta yazın"
+               aria-label="Katılımcı ekle"
+               value="@_search"
+               @oninput="OnSearchInput"
+               @onkeydown="OnSearchKeyDown" />
+
+        @if (_matches.Count > 0)
+        {
+            <div class="hesap-menu" style="top:40px;left:0;right:0;width:auto">
+                @foreach (var match in _matches)
+                {
+                    <button type="button" class="liste-ogesi" @onclick="() => Add(match)">
+                        <span class="hesap-baş hesap-baş--kucuk">@Initials(match.DisplayName)</span>
+                        <span class="liste-ogesi__ad">
+                            @match.DisplayName
+                            <span style="display:block;font-size:11px;color:var(--metin-3)">@match.Email</span>
+                        </span>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (Draft.Attendees.Any(a => a.IsExternal))
+    {
+        <div style="font-size:12px;color:var(--uyari);margin-top:6px">
+            Bu makinede hesabı olmayan kişilere davet ulaşmaz; yanıtlarını elle
+            işaretlemeniz gerekir. E-posta ile davet gönderme henüz yok.
+        </div>
+    }
+
+    @if (!Draft.IsNew && Draft.Attendees.Count > 0)
+    {
+        <label class="liste-ogesi" style="padding-left:0;margin-top:8px">
+            <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                   checked="@Draft.NotifyOnlyNewAttendees"
+                   @onchange="e => Draft.NotifyOnlyNewAttendees = (bool)(e.Value ?? false)" />
+            <span class="liste-ogesi__ad">Yalnızca yeni eklenenlere bildir</span>
+        </label>
+    }
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter, EditorRequired] public required EventDraft Draft { get; set; }
+
+    /// <summary>Organizatör bir zaman önerisini kabul ettiğinde.</summary>
+    [Parameter] public EventCallback<AttendeeDraft> OnAcceptProposal { get; set; }
+
+    private string _search = "";
+    private List<DirectoryEntry> _matches = [];
+    private AttendeeDraft? _expanded;
+
+    private int Count(ResponseStatus status) => Draft.Attendees.Count(a => a.Response == status);
+
+    private static string ResponseClass(ResponseStatus status) => status switch
+    {
+        ResponseStatus.Accepted => "yanit--kabul",
+        ResponseStatus.Declined => "yanit--ret",
+        ResponseStatus.Tentative => "yanit--belirsiz",
+        _ => "yanit--bekliyor",
+    };
+
+    private static string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var first = parts[0][..1];
+
+        return parts.Length == 1
+            ? first.ToUpper(TurkishFormat.Culture)
+            : (first + parts[^1][..1]).ToUpper(TurkishFormat.Culture);
+    }
+
+    private void Toggle(AttendeeDraft attendee)
+        => _expanded = _expanded == attendee ? null : attendee;
+
+    private void SetRole(AttendeeDraft attendee, ChangeEventArgs e)
+    {
+        if (Enum.TryParse<AttendeeRole>(e.Value?.ToString(), out var role)) attendee.Role = role;
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? "";
+
+        if (_search.Length < 2)
+        {
+            _matches = [];
+            return;
+        }
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var directory = scope.ServiceProvider.GetRequiredService<UserDirectory>();
+        var found = await directory.SearchAsync(_search);
+
+        // Zaten eklenmiş olanlar ve organizatörün kendisi listede çıkmaz.
+        _matches =
+        [
+            .. found.Where(m => m.UserId != Draft.OrganizerUserId
+                             && !Draft.Attendees.Any(a =>
+                                    string.Equals(a.Email, m.Email, StringComparison.OrdinalIgnoreCase)))
+        ];
+    }
+
+    /// <summary>Enter, dizinde bulunmayan bir e-postayı dış kişi olarak ekler.</summary>
+    private void OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+
+        if (_matches.Count > 0)
+        {
+            Add(_matches[0]);
+            return;
+        }
+
+        var text = _search.Trim();
+        if (!text.Contains('@', StringComparison.Ordinal)) return;
+
+        Add(new DirectoryEntry(null, text.Split('@')[0], text.ToLowerInvariant()));
+    }
+
+    private void Add(DirectoryEntry entry)
+    {
+        Draft.Attendees.Add(new AttendeeDraft
+        {
+            UserId = entry.UserId,
+            Email = entry.Email,
+            DisplayName = entry.DisplayName,
+        });
+
+        _search = "";
+        _matches = [];
+    }
+}
