@@ -53,8 +53,10 @@ src/
 └─ Takvim.Desktop/  WPF + WebView2 kabuğu
 
 tests/
-├─ Takvim.Core.Tests/   123 test — tekrarlama, zaman dilimi, ICS, ayrıştırıcı, tatiller
-└─ Takvim.Data.Tests/   38 test — seri düzenleme, silme, geri alma, hatırlatıcılar
+├─ Takvim.Core.Tests/   179 test — tekrarlama, zaman dilimi, ICS, ayrıştırıcı,
+│                       tatiller, izin motoru, müsaitlik hesabı
+└─ Takvim.Data.Tests/   63 test — seri düzenleme, silme, geri alma, hatırlatıcılar,
+                        çalışma düzeni, zamanlama
 ```
 
 Veri katmanı testleri gerçek SQLite üzerinde çalışır (bellek içi dosya), EF Core'un
@@ -64,6 +66,12 @@ gerçek sağlayıcıda sınanabilir.
 ```
 dotnet test
 ```
+
+> **Smart App Control notu.** Bu makinede Smart App Control açık
+> (`VerifiedAndReputablePolicyState = 1`) ve imzasız test derlemelerini bazen
+> engelliyor (`0x800711C7`). Veri testleri bu yüzden `TakvimVeriTestleri` adıyla
+> derleniyor. Aynı hata başka bir projede görülürse çözüm ya çıktı adını
+> değiştirmek ya da derlemeyi imzalamaktır; kodla ilgisi yoktur.
 
 ---
 
@@ -82,6 +90,35 @@ Bir ülke yaz saati kuralını değiştirdiğinde kayıtlı etkinlikler kaymaz �
 **İzinler.** Paylaşım seviyesi, vekil erişimi, etkinlik görünürlüğü ve kategori
 gizliliği birbirini kesen dört boyuttur. Tüm kombinasyonların cevabı kod yazılmadan
 önce [docs/izin-modeli.md](docs/izin-modeli.md) dosyasında tabloya döküldü.
+
+---
+
+## Faz 2 — durum
+
+| Alan | Durum |
+|---|---|
+| İzin motoru — dört boyutlu karar tablosunun uygulaması | ✅ |
+| Gün bazında çalışma saatleri ve öğle arası | ✅ |
+| Çalışma konumu (ofis / evden / şube), gün başlığında görünür | ✅ |
+| Tüm etkinlik durumları (meşgul, müsait, belirsiz, ofis dışı, odak, başka yerde) | ✅ |
+| Denetim kaydı | ✅ (Faz 1) |
+| Zamanlama yardımcısı — müsaitlik ızgarası ve önerilen aralıklar | ✅ takvimler arası |
+| Katılımcılar, RSVP, yanıt takibi, yeni zaman önerme | ⏸ karar bekliyor |
+| Takvim paylaşımı ve izin seviyeleri arayüzü | ⏸ karar bekliyor |
+| CalDAV sunucusu | ⏸ |
+
+**Neden duruyor:** Katılımcı, RSVP, paylaşım ve vekil erişimi çok kullanıcılı
+olmayı gerektirir. Kullanıcıların nasıl var olacağı ve davetlerin nasıl
+taşınacağı — tek makinede yerel hesaplar mı, ortak bir sunucu mu, e-posta
+üzerinden iTIP mi — tasarımı baştan sona değiştiren bir karardır. İzin motoru,
+müsaitlik hesabı ve etkinlik şemasındaki ilgili sütunlar bu kararın her
+sonucunda kullanılacak biçimde hazır; taşıma katmanı seçildiğinde üstüne
+kurulabilir.
+
+Zamanlama yardımcısı şu an **kendi takvimleriniz arasında** çalışıyor: iş ve
+kişisel takvimin müsaitliğini yan yana gösterip uygun aralık öneriyor. Aynı
+ızgara, satırlar kişilere dönüştüğünde katılımcılar için de çalışacak —
+`ScheduleLane` satırın kullanıcı mı takvim mi olduğunu bilmiyor.
 
 ---
 
@@ -108,6 +145,7 @@ gizliliği birbirini kesen dört boyuttur. Tüm kombinasyonların cevabı kod ya
 | Türkçe arayüz, resmi tatiller, arefe yarım günleri | ✅ |
 | Geri alma ve 30 günlük çöp kutusu | ✅ |
 | Değişiklik günlüğü (denetim + senkronizasyon imleci) | ✅ |
+| Takvimleri yan yana sütunlarda gösterme | ✅ |
 
 ### Faz 1'de bilinçli olarak yapılmayanlar
 
@@ -131,8 +169,9 @@ takvim ile Diyanet'in ilan ettiği tarih bazı yıllar bir gün ayrışır ve re
 Diyanet'e göre işler. **2024–2026 doğrulanmıştır; 2027–2032 tahminidir** ve arayüzde
 "tahmini" olarak işaretlenir. Diyanet ilan ettikçe bu dosya güncellenmelidir.
 
-**Mesai saatleri** şimdilik 09:00–18:00 sabittir (arefe günlerinde 13:00). Gün
-bazında ayarlanabilir hâle gelmesi Faz 2'dedir.
+**Mesai saatleri** artık gün bazında ayarlanabilir (kenar çubuğu → Çalışma
+düzeni). Resmi tatiller bu tanımı ezer: tam gün tatilde çalışılmaz, arefe
+günlerinde mesai 13:00'te biter.
 
 ---
 

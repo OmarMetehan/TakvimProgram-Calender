@@ -1,0 +1,352 @@
+@* Zamanlama yardımcısı: takvimlerin müsaitliği tek ızgarada yan yana,
+   önerilen aralıklar listede. Seçilen aralık düzenleyiciye geri döner. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="kutu" style="width:min(880px, calc(100vw - 32px));max-height:calc(100vh - 64px);overflow-y:auto"
+     role="dialog" aria-modal="true" aria-labelledby="zy-basligi">
+
+    <h2 class="kutu__baslik" id="zy-basligi">Uygun zaman bul</h2>
+
+    @* ---------- Ölçütler ---------- *@
+    <div style="display:grid;grid-template-columns:auto auto auto 1fr;gap:10px;align-items:end">
+        <div>
+            <label class="etiket" for="zy-tarih">Tarih</label>
+            <input id="zy-tarih" class="alan" type="date" style="width:160px"
+                   value="@_date.ToString("uuuu-MM-dd", CultureInfo.InvariantCulture)"
+                   @onchange="OnDateChanged" />
+        </div>
+
+        <div>
+            <label class="etiket" for="zy-sure">Süre</label>
+            <select id="zy-sure" class="alan" style="width:120px" @onchange="OnDurationChanged">
+                @foreach (var minutes in DurationChoices)
+                {
+                    <option value="@minutes" selected="@(minutes == _durationMinutes)">
+                        @TurkishFormat.Duration(Duration.FromMinutes(minutes))
+                    </option>
+                }
+            </select>
+        </div>
+
+        <div>
+            <label class="etiket" for="zy-adim">Adım</label>
+            <select id="zy-adim" class="alan" style="width:110px" @onchange="OnStepChanged">
+                <option value="15" selected="@(_stepMinutes == 15)">15 dakika</option>
+                <option value="30" selected="@(_stepMinutes == 30)">30 dakika</option>
+                <option value="60" selected="@(_stepMinutes == 60)">1 saat</option>
+            </select>
+        </div>
+
+        <label class="liste-ogesi" style="padding-left:0;justify-self:start">
+            <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                   checked="@_workingHoursOnly" @onchange="OnWorkingHoursToggled" />
+            <span class="liste-ogesi__ad">Yalnızca mesai saatleri</span>
+        </label>
+    </div>
+
+    @* ---------- Müsaitlik ızgarası ---------- *@
+    <div style="border:1px solid var(--cizgi);border-radius:var(--yuvarlak);overflow:hidden">
+
+        <div class="zy-satir zy-satir--baslik">
+            <div class="zy-ad">Takvim</div>
+            <div class="zy-serit">
+                @foreach (var hour in Hours)
+                {
+                    <div class="zy-saat" style="left:@(Percent(RatioOf(hour)))">@($"{hour:00}")</div>
+                }
+            </div>
+        </div>
+
+        @if (_lanes.Count == 0)
+        {
+            <div class="bos-durum" style="padding:24px">
+                <span>Gösterilecek takvim yok. Kenar çubuğundan en az bir takvim seçin.</span>
+            </div>
+        }
+
+        @foreach (var lane in _lanes)
+        {
+            <div class="zy-satir">
+                <div class="zy-ad" title="@lane.Name">@lane.Name</div>
+                <div class="zy-serit">
+                    @* Mesai dışı bölge *@
+                    @if (lane.WorkingHours is { } hours)
+                    {
+                        <div class="zy-mesai-disi" style="left:0;width:@(Percent(RatioOf(hours.Start)))"></div>
+                        <div class="zy-mesai-disi"
+                             style="left:@(Percent(RatioOf(hours.End)));right:0"></div>
+                    }
+                    else
+                    {
+                        <div class="zy-mesai-disi" style="left:0;right:0"></div>
+                    }
+
+                    @foreach (var busy in lane.Busy)
+                    {
+                        var left = RatioOf(busy.Start);
+                        var right = RatioOf(busy.End);
+
+                        <div class="zy-mesgul @(busy.IsBlocking ? "" : "zy-mesgul--yumusak")"
+                             style="left:@(Percent(left));width:@(Percent(Math.Max(right - left, 0.004)))"
+                             title="@Label(busy)"></div>
+                    }
+
+                    @* Seçilen aralık *@
+                    <div class="zy-secim"
+                         style="left:@(Percent(RatioOf(_selectedStart)));width:@(Percent(SelectionWidth))"
+                         aria-label="Seçilen aralık"></div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px">
+        <strong style="font-size:15px">
+            @TurkishFormat.TimeRange(LocalOf(_selectedStart), LocalOf(_selectedEnd))
+        </strong>
+        <span style="color:var(--metin-2)">@SelectionSummary</span>
+    </div>
+
+    @* ---------- Öneriler ---------- *@
+    <div>
+        <span class="etiket">Önerilen zamanlar</span>
+
+        @if (_suggestions.Count == 0)
+        {
+            <div style="color:var(--metin-3)">Bu gün için öneri üretilemedi.</div>
+        }
+        else
+        {
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                @foreach (var suggestion in _suggestions)
+                {
+                    <button type="button"
+                            class="zy-oneri @(suggestion.Start == _selectedStart ? "zy-oneri--secili" : "")"
+                            title="@Describe(suggestion)"
+                            @onclick="() => Select(suggestion.Start)">
+                        <span>@TurkishFormat.Time(LocalOf(suggestion.Start))</span>
+                        @if (!suggestion.IsPerfect)
+                        {
+                            <span class="zy-oneri__uyari">@ShortWarning(suggestion)</span>
+                        }
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="kutu__dugmeler">
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Vazgeç</button>
+        <button class="dugme dugme--birincil" @onclick="Apply">Bu saati kullan</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    /// <summary>Düzenleyiciden gelen başlangıç noktası; yardımcı buradan açılır.</summary>
+    [Parameter] public LocalDateTime? InitialStart { get; set; }
+
+    /// <summary>Düzenlenen etkinliğin süresi, dakika.</summary>
+    [Parameter] public int InitialDurationMinutes { get; set; } = 60;
+
+    /// <summary>Seçilen aralık onaylandığında.</summary>
+    [Parameter] public EventCallback<(LocalDateTime Start, LocalDateTime End)> OnPick { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private static readonly int[] DurationChoices = [15, 25, 30, 45, 50, 60, 90, 120, 180, 240];
+
+    /// <summary>Izgaranın kapsadığı saat aralığı. Gün başı ve sonu boşuna yer kaplamasın.</summary>
+    private const int GridStartHour = 7;
+    private const int GridEndHour = 21;
+
+    private LocalDate _date;
+    private int _durationMinutes = 60;
+    private int _stepMinutes = 30;
+    private bool _workingHoursOnly = true;
+
+    private List<ScheduleLane> _lanes = [];
+    private List<SlotSuggestion> _suggestions = [];
+    private Instant _selectedStart;
+    private Instant _selectedEnd;
+
+    private static IEnumerable<int> Hours => Enumerable.Range(GridStartHour, GridEndHour - GridStartHour + 1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var start = InitialStart ?? State.Now;
+        _date = start.Date;
+        _durationMinutes = Math.Max(15, InitialDurationMinutes);
+
+        // Süre listede yoksa en yakın seçenek alınır.
+        if (!DurationChoices.Contains(_durationMinutes))
+            _durationMinutes = DurationChoices.MinBy(d => Math.Abs(d - _durationMinutes));
+
+        _selectedStart = ToInstant(start);
+        _selectedEnd = _selectedStart + Duration.FromMinutes(_durationMinutes);
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var calendarIds = State.VisibleCalendars.Select(c => c.Id).ToList();
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var scheduling = scope.ServiceProvider.GetRequiredService<SchedulingService>();
+
+            _lanes = await scheduling.GetLanesAsync(
+                calendarIds,
+                ToInstant(_date.AtMidnight()),
+                ToInstant(_date.PlusDays(1).AtMidnight()),
+                CalendarBootstrapper.LocalUserId,
+                _date,
+                State.ZoneId);
+        }
+
+        Recompute();
+    }
+
+    private void Recompute()
+    {
+        var (windowStart, windowEnd) = SearchWindow();
+
+        _suggestions = FreeBusy.Suggest(
+            _lanes,
+            windowStart,
+            windowEnd,
+            Duration.FromMinutes(_durationMinutes),
+            Duration.FromMinutes(_stepMinutes));
+
+        // Seçim pencerenin dışında kaldıysa ilk öneriye çekilir.
+        if (_selectedStart < windowStart || _selectedEnd > windowEnd)
+        {
+            var fallback = _suggestions.Count > 0 ? _suggestions[0].Start : windowStart;
+            Select(fallback);
+        }
+        else
+        {
+            _selectedEnd = _selectedStart + Duration.FromMinutes(_durationMinutes);
+        }
+    }
+
+    /// <summary>Aramanın yapılacağı pencere: mesai saatleri ya da tüm ızgara.</summary>
+    private (Instant Start, Instant End) SearchWindow()
+    {
+        var hours = _lanes.Select(l => l.WorkingHours).FirstOrDefault(h => h is not null);
+
+        if (_workingHoursOnly && hours is { } window) return window;
+
+        return (ToInstant(_date.At(new LocalTime(GridStartHour, 0))),
+                ToInstant(_date.At(new LocalTime(GridEndHour, 0))));
+    }
+
+    private void Select(Instant start)
+    {
+        _selectedStart = start;
+        _selectedEnd = start + Duration.FromMinutes(_durationMinutes);
+    }
+
+    private Task Apply() => OnPick.InvokeAsync((LocalOf(_selectedStart), LocalOf(_selectedEnd)));
+
+    // ------------------------------------------------------------------
+    // Ölçütler değişince
+    // ------------------------------------------------------------------
+
+    private async Task OnDateChanged(ChangeEventArgs e)
+    {
+        if (!DateTime.TryParseExact(e.Value?.ToString(), "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+        {
+            return;
+        }
+
+        var previousTime = LocalOf(_selectedStart).TimeOfDay;
+        _date = LocalDate.FromDateTime(parsed);
+        _selectedStart = ToInstant(_date + previousTime);
+
+        await LoadAsync();
+    }
+
+    private void OnDurationChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var minutes)) _durationMinutes = minutes;
+        Recompute();
+    }
+
+    private void OnStepChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var minutes)) _stepMinutes = minutes;
+        Recompute();
+    }
+
+    private void OnWorkingHoursToggled(ChangeEventArgs e)
+    {
+        _workingHoursOnly = (bool)(e.Value ?? false);
+        Recompute();
+    }
+
+    // ------------------------------------------------------------------
+    // Görüntüleme yardımcıları
+    // ------------------------------------------------------------------
+
+    private Instant ToInstant(LocalDateTime local)
+        => local.InZoneLeniently(DateTimeZoneProviders.Tzdb[State.ZoneId]).ToInstant();
+
+    private LocalDateTime LocalOf(Instant instant)
+        => instant.InZone(DateTimeZoneProviders.Tzdb[State.ZoneId]).LocalDateTime;
+
+    /// <summary>Bir anın ızgaradaki yatay oranı (0-1).</summary>
+    private double RatioOf(Instant instant)
+    {
+        var local = LocalOf(instant);
+        var minutes = (local.Date - _date).Days * 24 * 60 + local.Hour * 60 + local.Minute;
+        var gridStart = GridStartHour * 60;
+        var gridLength = (GridEndHour - GridStartHour) * 60;
+
+        return Math.Clamp((minutes - gridStart) / (double)gridLength, 0, 1);
+    }
+
+    private double RatioOf(int hour)
+        => (hour - GridStartHour) / (double)(GridEndHour - GridStartHour);
+
+    private double SelectionWidth
+        => Math.Max(RatioOf(_selectedEnd) - RatioOf(_selectedStart), 0.006);
+
+    private static string Percent(double ratio)
+        => (ratio * 100).ToString("0.###", CultureInfo.InvariantCulture) + "%";
+
+    private string Label(BusyInterval busy)
+        => $"{TurkishFormat.TimeRange(LocalOf(busy.Start), LocalOf(busy.End))} — " +
+           (busy.IsBlocking ? "meşgul" : "belirsiz");
+
+    private string SelectionSummary
+    {
+        get
+        {
+            var conflicts = _lanes.Count(l =>
+                l.Busy.Any(b => b.IsBlocking && b.Overlaps(_selectedStart, _selectedEnd)));
+
+            return conflicts == 0 ? "Çakışma yok" : $"{conflicts} takvimde çakışıyor";
+        }
+    }
+
+    private static string Describe(SlotSuggestion suggestion)
+    {
+        if (suggestion.IsPerfect) return "Herkes müsait";
+
+        var parts = new List<string>();
+        if (suggestion.ConflictingRequired > 0) parts.Add($"{suggestion.ConflictingRequired} takvimde çakışıyor");
+        if (suggestion.OutsideWorkingHours) parts.Add("mesai dışı");
+
+        return string.Join(", ", parts);
+    }
+
+    private static string ShortWarning(SlotSuggestion suggestion)
+        => suggestion.ConflictingRequired > 0 ? "!" : "◷";
+}

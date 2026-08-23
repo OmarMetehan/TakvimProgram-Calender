@@ -1182,3 +1182,110 @@ kbd {
 /* Konum belirlenmemişse yalnızca üzerine gelince görünür; başlığı kalabalıklaştırmaz. */
 .calisma-konumu--bos { opacity: 0; background: transparent; }
 .gun-basligi:hover .calisma-konumu--bos { opacity: 1; background: var(--zemin-3); }
+
+/* ==========================================================================
+   Zamanlama yardımcısı
+   ========================================================================== */
+
+.zy-satir {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    align-items: center;
+    border-bottom: 1px solid var(--cizgi);
+    min-height: 34px;
+}
+
+.zy-satir:last-child { border-bottom: none; }
+.zy-satir--baslik { min-height: 24px; background: var(--zemin-2); }
+
+.zy-ad {
+    padding: 0 10px;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-right: 1px solid var(--cizgi);
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+}
+
+.zy-serit {
+    position: relative;
+    height: 100%;
+    min-height: 26px;
+    overflow: hidden;
+}
+
+.zy-saat {
+    position: absolute;
+    top: 4px;
+    font-size: 10px;
+    color: var(--metin-3);
+    transform: translateX(-50%);
+}
+
+/* Saat çizgileri: şeridin tamamına ince ızgara. */
+.zy-satir:not(.zy-satir--baslik) .zy-serit {
+    background-image: repeating-linear-gradient(
+        to right,
+        var(--cizgi) 0 1px,
+        transparent 1px calc(100% / 14));
+}
+
+.zy-mesai-disi {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: var(--zemin-3);
+    opacity: .75;
+}
+
+.zy-mesgul {
+    position: absolute;
+    top: 4px; bottom: 4px;
+    background: var(--birincil);
+    border-radius: 3px;
+    opacity: .82;
+}
+
+/* Belirsiz etkinlikler engel değildir; taralı çizilir. */
+.zy-mesgul--yumusak {
+    background: repeating-linear-gradient(
+        135deg,
+        var(--birincil) 0 4px,
+        transparent 4px 8px);
+    opacity: .5;
+}
+
+.zy-secim {
+    position: absolute;
+    top: 0; bottom: 0;
+    border: 2px solid var(--gecerli-saat);
+    background: color-mix(in srgb, var(--gecerli-saat) 14%, transparent);
+    border-radius: 3px;
+    pointer-events: none;
+}
+
+.zy-oneri {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    padding: 0 11px;
+    border: 1px solid var(--cizgi);
+    border-radius: 15px;
+    background: var(--zemin);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.zy-oneri:hover { border-color: var(--birincil); background: var(--birincil-yumusak); }
+
+.zy-oneri--secili {
+    border-color: var(--birincil);
+    background: var(--birincil);
+    color: var(--birincil-metin);
+}
+
+.zy-oneri__uyari { color: var(--uyari); font-weight: 700; }
+.zy-oneri--secili .zy-oneri__uyari { color: inherit; }

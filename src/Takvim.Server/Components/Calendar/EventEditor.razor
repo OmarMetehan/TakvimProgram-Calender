@@ -83,6 +83,11 @@
 
             @if (!Draft.IsAllDay)
             {
+                <button class="dugme dugme--sade" style="align-self:flex-start"
+                        @onclick="() => OnFindTime.InvokeAsync(Draft)">
+                    🔍 Uygun zaman bul
+                </button>
+
                 <details>
                     <summary style="cursor:pointer;font-size:13px;color:var(--metin-2)">Zaman dilimi</summary>
                     <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px">
@@ -291,6 +296,9 @@
     [Parameter] public EventCallback<EventDraft> OnSave { get; set; }
     [Parameter] public EventCallback OnDelete { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
+
+    /// <summary>Zamanlama yardımcısını açar; seçilen aralık taslağa geri yazılır.</summary>
+    [Parameter] public EventCallback<EventDraft> OnFindTime { get; set; }
 
     private List<string> _problems = [];
 
