@@ -20,7 +20,8 @@
         <Sidebar OnCreate="() => OpenQuickCreate(null)"
                  OnOpenTrash="() => _panel = Panel.Trash"
                  OnOpenImportExport="() => _panel = Panel.ImportExport"
-                 OnOpenShortcuts="() => _panel = Panel.Shortcuts" />
+                 OnOpenShortcuts="() => _panel = Panel.Shortcuts"
+                 OnOpenWorkSchedule="() => OpenWorkSchedule(State.Today)" />
 
         <main class="icerik">
             @if (State.IsLoading)
@@ -46,7 +47,8 @@
                     <TimeGrid OnActivate="Activate"
                               OnCreateSlot="OnCreateSlot"
                               OnMove="OnMove"
-                              OnResize="OnResize" />
+                              OnResize="OnResize"
+                              OnEditLocation="OpenWorkSchedule" />
                     break;
             }
         </main>
@@ -93,6 +95,11 @@
         <ShortcutHelp OnClose="CloseAll" />
     }
 
+    @if (_panel == Panel.WorkSchedule)
+    {
+        <WorkScheduleDialog Date="_workScheduleDate" OnClose="CloseAll" />
+    }
+
     @if (_pendingScope is not null)
     {
         <ScopeDialog IsDelete="_pendingScopeIsDelete"
@@ -110,7 +117,7 @@
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
     [Inject] public required IJSRuntime Js { get; set; }
 
-    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts }
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule }
 
     private Panel _panel = Panel.None;
 
@@ -118,6 +125,7 @@
     private string _previewPosition = "";
     private EventDraft? _draft;
     private LocalDateTime? _quickCreateStart;
+    private LocalDate? _workScheduleDate;
 
     /// <summary>Tekrarlayan bir etkinliğe uygulanacak, kapsam seçimini bekleyen işlem.</summary>
     private Func<SeriesEditScope, Task>? _pendingScope;
@@ -284,6 +292,14 @@
     private sealed record Rect(
         double Top, double Left, double Right, double Bottom,
         double Width, double Height, double ViewportWidth, double ViewportHeight);
+
+    private void OpenWorkSchedule(LocalDate date)
+    {
+        _workScheduleDate = date;
+        _preview = null;
+        _panel = Panel.WorkSchedule;
+        StateHasChanged();
+    }
 
     private void ClosePreview()
     {
@@ -580,6 +596,7 @@
         _draft = null;
         _pendingScope = null;
         _quickCreateStart = null;
+        _workScheduleDate = null;
         StateHasChanged();
     }
 

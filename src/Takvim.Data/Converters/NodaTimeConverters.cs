@@ -18,6 +18,12 @@ public static class NodaTimeConverters
     internal static readonly InstantPattern UtcPattern =
         InstantPattern.CreateWithInvariantCulture("uuuu-MM-ddTHH:mm:ss'Z'");
 
+    internal static readonly LocalDatePattern DatePattern =
+        LocalDatePattern.CreateWithInvariantCulture("uuuu-MM-dd");
+
+    internal static readonly LocalTimePattern TimePattern =
+        LocalTimePattern.CreateWithInvariantCulture("HH:mm:ss");
+
     /// <summary>
     /// DateTimeOffset, NodaTime değil BCL biçimlendirmesi kullanır: yıl belirteci
     /// "uuuu" değil "yyyy"dir. Yanlış belirteç sessizce harfi harfine yazılır.
@@ -35,6 +41,18 @@ public static class NodaTimeConverters
         : ValueConverter<Instant, string>(
             v => UtcPattern.Format(v),
             v => UtcPattern.Parse(v).Value);
+
+    /// <summary>Zaman dilimsiz tarih: tüm gün etkinlikleri ve çalışma konumu kayıtları.</summary>
+    public sealed class LocalDateToStringConverter()
+        : ValueConverter<LocalDate, string>(
+            v => DatePattern.Format(v),
+            v => DatePattern.Parse(v).Value);
+
+    /// <summary>Günün saati: mesai başlangıcı ve bitişi.</summary>
+    public sealed class LocalTimeToStringConverter()
+        : ValueConverter<LocalTime, string>(
+            v => TimePattern.Format(v),
+            v => TimePattern.Parse(v).Value);
 
     /// <summary>Oluşturma/güncelleme damgaları. Her zaman UTC'ye normalleştirilir.</summary>
     public sealed class DateTimeOffsetToStringConverter()

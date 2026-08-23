@@ -29,6 +29,20 @@
                         @holidays[0].Name@(holidays[0].IsEstimated ? " (tahmini)" : "")
                     </div>
                 }
+                else if (State.ScheduleFor(day) is { Location: not WorkLocation.Unspecified } daySchedule)
+                {
+                    <button type="button" class="calisma-konumu"
+                            title="Çalışma konumu — değiştirmek için tıklayın"
+                            @onclick="() => OnEditLocation.InvokeAsync(day)">
+                        @LocationIcon(daySchedule.Location) @daySchedule.LocationLabel
+                    </button>
+                }
+                else
+                {
+                    <button type="button" class="calisma-konumu calisma-konumu--bos"
+                            title="Çalışma konumu belirle"
+                            @onclick="() => OnEditLocation.InvokeAsync(day)">+ konum</button>
+                }
 
                 @if (SplitByCalendar)
                 {
@@ -90,9 +104,26 @@
                      @ondragover:preventDefault="true"
                      @ondrop="e => Drop(column, e)">
 
-                    @* Mesai dışı saatler soluk gösterilir. *@
-                    <div class="mesai-disi" style="top:0;height:@(Percent(WorkStart.Hour / 24.0))"></div>
-                    <div class="mesai-disi" style="top:@(Percent(WorkEndOf(day) / 24.0));bottom:0"></div>
+                    @* Mesai dışı saatler soluk gösterilir. Çalışılmayan günde
+                       gün tümüyle soluktur; öğle arası da ayrıca işaretlenir. *@
+                    @{
+                        var schedule = State.ScheduleFor(day);
+                    }
+                    @if (!schedule.IsWorkingDay)
+                    {
+                        <div class="mesai-disi" style="top:0;bottom:0"></div>
+                    }
+                    else
+                    {
+                        <div class="mesai-disi" style="top:0;height:@(Percent(schedule.StartRatio))"></div>
+                        <div class="mesai-disi" style="top:@(Percent(schedule.EndRatio));bottom:0"></div>
+
+                        @if (schedule.BreakStartRatio is { } breakStart && schedule.BreakEndRatio is { } breakEnd)
+                        {
+                            <div class="mesai-disi"
+                                 style="top:@(Percent(breakStart));height:@(Percent(breakEnd - breakStart))"></div>
+                        }
+                    }
 
                     @for (var hour = 0; hour < 24; hour++)
                     {
@@ -138,12 +169,11 @@
 
     [Parameter] public EventCallback<(EventOccurrence Occurrence, LocalDateTime NewEnd)> OnResize { get; set; }
 
+    /// <summary>Gün başlığındaki çalışma konumu rozetine tıklandığında.</summary>
+    [Parameter] public EventCallback<LocalDate> OnEditLocation { get; set; }
+
     /// <summary>Izgaradaki tek bir sütun: bir gün ve (yan yana kipte) bir takvim.</summary>
     private readonly record struct GridColumn(LocalDate Day, Guid? CalendarId);
-
-    /// <summary>Mesai saatleri. Faz 2'de gün bazında ayarlanabilir olacak.</summary>
-    private static readonly LocalTime WorkStart = new(9, 0);
-    private static readonly LocalTime WorkEnd = new(18, 0);
 
     /// <summary>Izgarada tıklamaların yuvarlanacağı dilim.</summary>
     private const int SlotMinutes = 15;
@@ -220,13 +250,14 @@
         await Js.InvokeVoidAsync("takvim.scrollToRatio", "izgara-govde", NowRatio);
     }
 
-    /// <summary>Arefe günlerinde mesai 13:00'te biter; soluk alan buna göre çizilir.</summary>
-    private double WorkEndOf(LocalDate day)
+    private static string LocationIcon(WorkLocation location) => location switch
     {
-        var end = State.VisibleHolidays[day]
-            .FirstOrDefault(h => h.Kind == HolidayKind.HalfDayEve)?.WorkEndsAt ?? WorkEnd;
-        return end.Hour + end.Minute / 60.0;
-    }
+        WorkLocation.Office => "🏢",
+        WorkLocation.Home => "🏠",
+        WorkLocation.Branch => "📍",
+        WorkLocation.Away => "✈",
+        _ => "",
+    };
 
     private IEnumerable<EventOccurrence> TimedIn(GridColumn column)
     {

@@ -73,6 +73,11 @@ public sealed class CalendarBootstrapper(TakvimDbContext db)
                 new Category { OwnerUserId = LocalUserId, Name = "Kişisel", Color = "flamingo", SortOrder = 3, IsPrivate = true });
         }
 
+        if (!await db.WorkingHours.AnyAsync(w => w.UserId == LocalUserId, ct).ConfigureAwait(false))
+        {
+            db.WorkingHours.AddRange(WorkingHours.DefaultWeek(LocalUserId));
+        }
+
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 

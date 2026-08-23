@@ -1,0 +1,220 @@
+@* Çalışma düzeni: bir günün çalışma konumu ve haftalık mesai saatleri. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel" role="dialog" aria-modal="true" aria-label="Çalışma düzeni">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Çalışma düzeni</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        @if (Date is { } date)
+        {
+            <section>
+                <h3 style="font-size:14px;margin:0 0 4px">@TurkishFormat.LongDateWithDay(date)</h3>
+                <p style="color:var(--metin-2);margin:0 0 10px">
+                    Bu günkü çalışma konumunuz. Ekip takvimlerinde görünür.
+                </p>
+
+                <div class="secenek-listesi">
+                    @foreach (var (location, label, description) in Locations)
+                    {
+                        <button type="button"
+                                class="secenek @(_location == location ? "secenek--secili" : "")"
+                                aria-pressed="@(_location == location ? "true" : "false")"
+                                @onclick="() => _location = location">
+                            <span aria-hidden="true" style="font-size:17px">@Icon(location)</span>
+                            <span style="flex:1">
+                                <span class="secenek__ad">@label</span><br />
+                                <span class="secenek__aciklama">@description</span>
+                            </span>
+                        </button>
+                    }
+                </div>
+
+                @if (_location == WorkLocation.Branch)
+                {
+                    <input class="alan" style="margin-top:8px" placeholder="Şube veya yer adı"
+                           @bind="_note" @bind:event="oninput" />
+                }
+
+                <button class="dugme dugme--birincil" style="margin-top:10px" @onclick="SaveLocation">
+                    Konumu kaydet
+                </button>
+            </section>
+
+            <hr style="border:none;border-top:1px solid var(--cizgi)" />
+        }
+
+        <section>
+            <h3 style="font-size:14px;margin:0 0 4px">Haftalık mesai saatleri</h3>
+            <p style="color:var(--metin-2);margin:0 0 10px">
+                Mesai dışı saatler ızgarada soluk gösterilir. Resmi tatiller ve arefe
+                günleri bu tanımı geçersiz kılar.
+            </p>
+
+            @foreach (var day in _week)
+            {
+                <div style="display:grid;grid-template-columns:34px 96px auto auto;gap:6px;align-items:center;margin-bottom:6px">
+                    <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                           checked="@day.IsWorkingDay"
+                           aria-label="@DayName(day.DayOfWeek) günü çalışılıyor"
+                           @onchange="e => day.IsWorkingDay = (bool)(e.Value ?? false)" />
+
+                    <span style="font-size:13px;@(day.IsWorkingDay ? "" : "color:var(--metin-3)")">
+                        @DayName(day.DayOfWeek)
+                    </span>
+
+                    @if (day.IsWorkingDay)
+                    {
+                        <input class="alan" type="time" style="width:104px"
+                               aria-label="@DayName(day.DayOfWeek) mesai başlangıcı"
+                               value="@Format(day.Start)"
+                               @onchange="e => day.Start = ParseTime(e.Value, day.Start)" />
+
+                        <input class="alan" type="time" style="width:104px"
+                               aria-label="@DayName(day.DayOfWeek) mesai bitişi"
+                               value="@Format(day.End)"
+                               @onchange="e => day.End = ParseTime(e.Value, day.End)" />
+                    }
+                    else
+                    {
+                        <span style="grid-column:span 2;color:var(--metin-3);font-size:12px">Çalışılmıyor</span>
+                    }
+                </div>
+            }
+
+            @if (_problem is { } problem)
+            {
+                <div role="alert" style="color:var(--tehlike);margin-top:6px">@problem</div>
+            }
+        </section>
+    </div>
+
+    <div class="panel__alt">
+        <button class="dugme" @onclick="ApplyWeekdayDefaults">Hafta içi 09.00–18.00</button>
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Vazgeç</button>
+        <button class="dugme dugme--birincil" @onclick="SaveWeek">Kaydet</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    /// <summary>Çalışma konumu bölümünün hangi gün için gösterileceği. Null ise yalnızca mesai düzenlenir.</summary>
+    [Parameter] public LocalDate? Date { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private readonly List<WorkingHours> _week = [];
+    private WorkLocation _location = WorkLocation.Unspecified;
+    private string? _note;
+    private string? _problem;
+
+    private static readonly (WorkLocation Location, string Label, string Description)[] Locations =
+    [
+        (WorkLocation.Office, "Ofis", "Her zamanki iş yerindesiniz."),
+        (WorkLocation.Home, "Evden", "Uzaktan çalışıyorsunuz."),
+        (WorkLocation.Branch, "Şube", "Başka bir ofis ya da yerdesiniz."),
+        (WorkLocation.Away, "Çalışmıyor", "İzin, tatil ya da mesai dışı."),
+        (WorkLocation.Unspecified, "Belirtme", "Konum işareti kaldırılır."),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Date is { } date)
+        {
+            var schedule = State.ScheduleFor(date);
+            _location = schedule.Location;
+            _note = schedule.LocationNote;
+        }
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+
+        var saved = await db.WorkingHours
+            .AsNoTracking()
+            .Where(w => w.UserId == CalendarBootstrapper.LocalUserId)
+            .ToDictionaryAsync(w => w.DayOfWeek);
+
+        _week.Clear();
+        foreach (var day in WeekOrder)
+        {
+            _week.Add(saved.TryGetValue(day, out var existing)
+                ? existing
+                : new WorkingHours { UserId = CalendarBootstrapper.LocalUserId, DayOfWeek = day });
+        }
+    }
+
+    /// <summary>Türkiye'de hafta pazartesi başlar.</summary>
+    private static readonly IsoDayOfWeek[] WeekOrder =
+    [
+        IsoDayOfWeek.Monday, IsoDayOfWeek.Tuesday, IsoDayOfWeek.Wednesday, IsoDayOfWeek.Thursday,
+        IsoDayOfWeek.Friday, IsoDayOfWeek.Saturday, IsoDayOfWeek.Sunday,
+    ];
+
+    private static string DayName(IsoDayOfWeek day) => TurkishFormat.DayNames[(int)day - 1];
+
+    private static string Format(LocalTime time) => $"{time.Hour:00}:{time.Minute:00}";
+
+    private static LocalTime ParseTime(object? value, LocalTime fallback)
+        => TurkishFormat.TryParseTime(value?.ToString(), out var parsed) ? parsed : fallback;
+
+    private static string Icon(WorkLocation location) => location switch
+    {
+        WorkLocation.Office => "🏢",
+        WorkLocation.Home => "🏠",
+        WorkLocation.Branch => "📍",
+        WorkLocation.Away => "✈",
+        _ => "—",
+    };
+
+    private void ApplyWeekdayDefaults()
+    {
+        foreach (var day in _week)
+        {
+            day.IsWorkingDay = day.DayOfWeek <= IsoDayOfWeek.Friday;
+            day.Start = new LocalTime(9, 0);
+            day.End = new LocalTime(18, 0);
+        }
+    }
+
+    private async Task SaveLocation()
+    {
+        if (Date is not { } date) return;
+
+        await State.SetWorkLocationAsync(date, _location,
+            _location == WorkLocation.Branch ? _note : null);
+
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task SaveWeek()
+    {
+        var invalid = _week.FirstOrDefault(d => d.IsWorkingDay && d.End <= d.Start);
+        if (invalid is not null)
+        {
+            _problem = $"{DayName(invalid.DayOfWeek)} günü bitiş saati başlangıçtan sonra olmalı.";
+            return;
+        }
+
+        _problem = null;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<WorkScheduleService>();
+            await service.SaveWeeklyAsync(CalendarBootstrapper.LocalUserId, _week);
+        }
+
+        await State.ReloadAsync();
+        await OnChanged.InvokeAsync();
+        await OnClose.InvokeAsync();
+    }
+}

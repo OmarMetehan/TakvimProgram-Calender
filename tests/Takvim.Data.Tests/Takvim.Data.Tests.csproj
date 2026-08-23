@@ -1,10 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- Smart App Control, imzasız çıktıyı dosya itibarına göre değerlendirir ve
+         "Takvim.Data.Tests.dll" adı bir kez engellendiğinde kalıcı olarak
+         engellenir. Ayrı bir çıktı adı yeni bir değerlendirme başlatır. -->
+    <AssemblyName>TakvimVeriTestleri</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

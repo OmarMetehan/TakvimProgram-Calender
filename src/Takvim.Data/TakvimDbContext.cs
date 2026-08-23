@@ -14,6 +14,8 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<EventCategory> EventCategories => Set<EventCategory>();
     public DbSet<Reminder> Reminders => Set<Reminder>();
     public DbSet<ChangeLogEntry> ChangeLog => Set<ChangeLogEntry>();
+    public DbSet<WorkingHours> WorkingHours => Set<WorkingHours>();
+    public DbSet<WorkLocationEntry> WorkLocations => Set<WorkLocationEntry>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -25,6 +27,10 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             .HaveConversion<NodaTimeConverters.InstantToStringConverter>();
         configurationBuilder.Properties<DateTimeOffset>()
             .HaveConversion<NodaTimeConverters.DateTimeOffsetToStringConverter>();
+        configurationBuilder.Properties<LocalDate>()
+            .HaveConversion<NodaTimeConverters.LocalDateToStringConverter>();
+        configurationBuilder.Properties<LocalTime>()
+            .HaveConversion<NodaTimeConverters.LocalTimeToStringConverter>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -131,6 +137,22 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<WorkingHours>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            // Bir kullanıcının bir gün için tek mesai tanımı olur.
+            e.HasIndex(x => new { x.UserId, x.DayOfWeek }).IsUnique();
+        });
+
+        modelBuilder.Entity<WorkLocationEntry>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Note).HasMaxLength(200);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.UserId, x.Date }).IsUnique();
         });
 
         base.OnModelCreating(modelBuilder);

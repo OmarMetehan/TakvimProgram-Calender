@@ -1158,3 +1158,27 @@ kbd {
         transition-duration: .001ms !important;
     }
 }
+
+/* Gün başlığındaki çalışma konumu rozeti */
+.calisma-konumu {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 100%;
+    padding: 1px 7px;
+    margin-top: 2px;
+    border-radius: 10px;
+    background: var(--zemin-3);
+    color: var(--metin-2);
+    font-size: 10px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calisma-konumu:hover { background: var(--birincil-yumusak); color: var(--birincil); }
+
+/* Konum belirlenmemişse yalnızca üzerine gelince görünür; başlığı kalabalıklaştırmaz. */
+.calisma-konumu--bos { opacity: 0; background: transparent; }
+.gun-basligi:hover .calisma-konumu--bos { opacity: 1; background: var(--zemin-3); }

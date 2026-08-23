@@ -76,6 +76,11 @@
             <span class="liste-ogesi__ad">İçe / dışa aktar</span>
         </button>
 
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenWorkSchedule.InvokeAsync()">
+            <span aria-hidden="true">🕘</span>
+            <span class="liste-ogesi__ad">Çalışma düzeni</span>
+        </button>
+
         <button type="button" class="liste-ogesi" @onclick="() => OnOpenShortcuts.InvokeAsync()">
             <span aria-hidden="true">⌨</span>
             <span class="liste-ogesi__ad">Klavye kısayolları</span>
@@ -92,6 +97,7 @@
     [Parameter] public EventCallback OnOpenTrash { get; set; }
     [Parameter] public EventCallback OnOpenImportExport { get; set; }
     [Parameter] public EventCallback OnOpenShortcuts { get; set; }
+    [Parameter] public EventCallback OnOpenWorkSchedule { get; set; }
 
     private Task OnDateSelected(LocalDate date)
     {

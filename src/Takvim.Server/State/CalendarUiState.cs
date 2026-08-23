@@ -30,6 +30,7 @@ public sealed class CalendarUiState(
     private readonly List<Calendar> _calendars = [];
     private readonly List<Category> _categories = [];
     private List<EventOccurrence> _occurrences = [];
+    private Dictionary<LocalDate, DaySchedule> _schedules = [];
 
     /// <summary>Görünüm ya da veri değiştiğinde tetiklenir.</summary>
     public event Action? Changed;
@@ -43,6 +44,9 @@ public sealed class CalendarUiState(
     public IReadOnlyList<Calendar> Calendars => _calendars;
     public IReadOnlyList<Category> Categories => _categories;
     public IReadOnlyList<EventOccurrence> Occurrences => _occurrences;
+
+    /// <summary>Görünen günlerin mesai düzeni; ızgaranın soluk alanları buradan çizilir.</summary>
+    public IReadOnlyDictionary<LocalDate, DaySchedule> Schedules => _schedules;
 
     public bool IsLoading { get; private set; }
     public UndoPrompt? PendingUndo { get; private set; }
@@ -115,6 +119,11 @@ public sealed class CalendarUiState(
             _occurrences = await query
                 .GetOccurrencesAsync(RangeStartUtc, RangeEndUtc, filter, ct)
                 .ConfigureAwait(false);
+
+            var schedule = scope.ServiceProvider.GetRequiredService<WorkScheduleService>();
+            _schedules = await schedule
+                .GetRangeAsync(CalendarBootstrapper.LocalUserId, View.RangeStart, View.RangeEnd, ct)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -180,6 +189,37 @@ public sealed class CalendarUiState(
         => holidays.InRange(View.RangeStart, View.RangeEnd.PlusDays(-1)).ToLookup(h => h.Date);
 
     public bool IsDayOff(LocalDate date) => holidays.IsDayOff(date);
+
+    /// <summary>
+    /// Günün mesai düzeni. Yüklenmemiş bir gün istenirse makul bir varsayılan
+    /// döner; görünüm, veri gelmeden de çizilebilmelidir.
+    /// </summary>
+    public DaySchedule ScheduleFor(LocalDate date)
+        => _schedules.TryGetValue(date, out var schedule)
+            ? schedule
+            : new DaySchedule(date,
+                IsWorkingDay: date.DayOfWeek <= IsoDayOfWeek.Friday,
+                Start: new LocalTime(9, 0),
+                End: new LocalTime(18, 0),
+                BreakStart: null,
+                BreakEnd: null,
+                Location: WorkLocation.Unspecified,
+                LocationNote: null,
+                HolidayName: null);
+
+    /// <summary>Bir günün çalışma konumunu ayarlar ve görünümü tazeler.</summary>
+    public async Task SetWorkLocationAsync(
+        LocalDate date, WorkLocation location, string? note = null, CancellationToken ct = default)
+    {
+        await using (var scope = scopeFactory.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<WorkScheduleService>();
+            await service.SetLocationAsync(CalendarBootstrapper.LocalUserId, date, location, note, ct)
+                .ConfigureAwait(false);
+        }
+
+        await ReloadAsync(ct).ConfigureAwait(false);
+    }
 
     // ------------------------------------------------------------------
     // Bildirimler
