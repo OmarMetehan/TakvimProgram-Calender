@@ -1,0 +1,126 @@
+@* Hızlı oluşturma kartı. Türkçe cümle yazılır, alanlar kendiliğinden dolar. *@
+
+<div class="perde" @onclick="() => OnCancel.InvokeAsync()"></div>
+
+<div class="kutu" role="dialog" aria-modal="true" aria-label="Hızlı etkinlik oluştur">
+
+    <h2 class="kutu__baslik">Hızlı oluştur</h2>
+
+    <div>
+        <input class="alan"
+               id="hizli-olustur-alani"
+               style="font-size:16px;height:42px"
+               placeholder="perşembe 14:00 Ahmet ile toplantı"
+               value="@_text"
+               @oninput="OnInput"
+               @onkeydown="OnKeyDown" />
+
+        <div style="font-size:12px;color:var(--metin-3);margin-top:6px">
+            Gün, saat, süre ve tekrar yazabilirsiniz: <em>her salı 10:00 ekip toplantısı</em>,
+            <em>yarın 14:00-15:30 bütçe</em>, <em>5 Nisan tüm gün tatil</em>
+        </div>
+    </div>
+
+    <div style="border:1px solid var(--cizgi);border-radius:var(--yuvarlak);padding:10px 12px;background:var(--zemin-2)">
+        <div style="font-size:12px;color:var(--metin-3);margin-bottom:3px">Anlaşılan</div>
+        <div style="font-weight:500">@(string.IsNullOrWhiteSpace(_parsed.Title) ? "(başlıksız)" : _parsed.Title)</div>
+        <div style="color:var(--metin-2)">@_parsed.Summary</div>
+        @if (_parsed.RecurrenceRule is not null)
+        {
+            <div style="color:var(--metin-2)">↻ @RecurrenceRuleBuilder.Describe(_parsed.RecurrenceRule, _parsed.Start.Date)</div>
+        }
+    </div>
+
+    <div>
+        <label class="etiket" for="hizli-takvim">Takvim</label>
+        <select id="hizli-takvim" class="alan" @bind="_calendarId">
+            @foreach (var calendar in State.Calendars.Where(c => !c.IsReadOnly))
+            {
+                <option value="@calendar.Id">@calendar.Name</option>
+            }
+        </select>
+    </div>
+
+    <div class="kutu__dugmeler">
+        <button class="dugme" @onclick="OpenFullEditor">Ayrıntılar…</button>
+        <span style="flex:1"></span>
+        <button class="dugme" @onclick="() => OnCancel.InvokeAsync()">Vazgeç</button>
+        <button class="dugme dugme--birincil" @onclick="Save">Kaydet</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IJSRuntime Js { get; set; }
+
+    /// <summary>Kart açılırken kullanılacak başlangıç zamanı (ızgaradan tıklanmışsa).</summary>
+    [Parameter] public LocalDateTime? InitialStart { get; set; }
+
+    [Parameter] public EventCallback<EventDraft> OnSave { get; set; }
+
+    /// <summary>Kullanıcı ayrıntılı düzenleyiciye geçmek istediğinde.</summary>
+    [Parameter] public EventCallback<EventDraft> OnExpand { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string _text = string.Empty;
+    private ParsedEvent _parsed = default!;
+    private Guid _calendarId;
+
+    protected override void OnInitialized()
+    {
+        _calendarId = State.DefaultCalendar?.Id ?? Guid.Empty;
+        Reparse();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Js.InvokeVoidAsync("takvim.focus", "#hizli-olustur-alani");
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _text = e.Value?.ToString() ?? string.Empty;
+        Reparse();
+    }
+
+    /// <summary>
+    /// Ayrıştırmanın dayanağı: ızgaradan bir saate tıklanmışsa o an, yoksa şimdi.
+    /// Böylece boş bir hücreye tıklayıp "toplantı" yazmak o hücreye etkinlik koyar.
+    /// </summary>
+    private void Reparse()
+        => _parsed = TurkishEventParser.Parse(_text, InitialStart ?? State.Now);
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Save();
+    }
+
+    private EventDraft BuildDraft()
+    {
+        var calendar = State.CalendarOf(_calendarId);
+
+        var draft = EventDraft.ForNewEvent(
+            _calendarId,
+            _parsed.Start,
+            _parsed.End,
+            _parsed.IsAllDay,
+            State.ZoneId,
+            _parsed.IsAllDay ? calendar?.DefaultAllDayReminderMinutes : calendar?.DefaultReminderMinutes);
+
+        draft.Title = _parsed.Title;
+
+        if (_parsed.RecurrenceRule is { } rule)
+        {
+            draft.RecurrencePreset = RecurrencePreset.Custom;
+            draft.CustomRecurrenceRule = rule;
+        }
+
+        return draft;
+    }
+
+    private Task Save() => OnSave.InvokeAsync(BuildDraft());
+
+    private Task OpenFullEditor() => OnExpand.InvokeAsync(BuildDraft());
+}

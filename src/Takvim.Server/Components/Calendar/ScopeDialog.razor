@@ -1,0 +1,63 @@
+@* Tekrarlayan bir etkinlikte düzenleme veya silmenin kapsamını sorar. *@
+
+<div class="perde" @onclick="() => OnCancel.InvokeAsync()"></div>
+
+<div class="kutu" role="dialog" aria-modal="true" aria-labelledby="kapsam-basligi">
+
+    <h2 class="kutu__baslik" id="kapsam-basligi">
+        @(IsDelete ? "Tekrarlayan etkinliği sil" : "Tekrarlayan etkinliği düzenle")
+    </h2>
+
+    <div class="secenek-listesi">
+        @foreach (var (scope, label, description) in Options)
+        {
+            <button type="button"
+                    class="secenek @(_selected == scope ? "secenek--secili" : "")"
+                    aria-pressed="@(_selected == scope ? "true" : "false")"
+                    @onclick="() => _selected = scope">
+                <span style="flex:1">
+                    <span class="secenek__ad">@label</span><br />
+                    <span class="secenek__aciklama">@description</span>
+                </span>
+            </button>
+        }
+    </div>
+
+    <div class="kutu__dugmeler">
+        <button class="dugme" @onclick="() => OnCancel.InvokeAsync()">Vazgeç</button>
+        <button class="dugme dugme--birincil @(IsDelete ? "dugme--tehlike" : "")"
+                @onclick="() => OnConfirm.InvokeAsync(_selected)">
+            @(IsDelete ? "Sil" : "Kaydet")
+        </button>
+    </div>
+</div>
+
+@code {
+    /// <summary>Silme mi düzenleme mi; metinler buna göre değişir.</summary>
+    [Parameter] public bool IsDelete { get; set; }
+
+    [Parameter] public EventCallback<SeriesEditScope> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private SeriesEditScope _selected = SeriesEditScope.ThisOnly;
+
+    private (SeriesEditScope Scope, string Label, string Description)[] Options => IsDelete
+        ?
+        [
+            (SeriesEditScope.ThisOnly, "Bu etkinlik",
+             "Yalnızca bu örnek silinir, seri devam eder."),
+            (SeriesEditScope.ThisAndFuture, "Bu ve sonraki etkinlikler",
+             "Seri bu tarihten itibaren sona erer; önceki örnekler kalır."),
+            (SeriesEditScope.AllInSeries, "Tüm etkinlikler",
+             "Serinin tamamı çöp kutusuna gider."),
+        ]
+        :
+        [
+            (SeriesEditScope.ThisOnly, "Bu etkinlik",
+             "Yalnızca bu örnek değişir; seriden ayrı bir istisna olur."),
+            (SeriesEditScope.ThisAndFuture, "Bu ve sonraki etkinlikler",
+             "Seri bu tarihte ikiye bölünür; önceki örnekler eski hâlinde kalır."),
+            (SeriesEditScope.AllInSeries, "Tüm etkinlikler",
+             "Serinin tamamı değişir. Tek tek yapılmış düzenlemeler sıfırlanır, silinen örnekler silinmiş kalır."),
+        ];
+}

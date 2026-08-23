@@ -1,0 +1,32 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,csproj,props,targets,razor,html,css,js}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+# "Event" alan adımızdır ve VB ile birlikte kullanılmayacak.
+dotnet_diagnostic.CA1716.severity = none
+
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_sort_system_directives_first = true
+
+# Test adlarında alt çizgi bilinçli bir seçimdir: "Ne_olmali" okunurluğu artırır.
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none
+
+# EF Core göç dosyaları araç tarafından üretilir; biçim ve analiz kuralları uygulanmaz.
+[**/Migrations/*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none

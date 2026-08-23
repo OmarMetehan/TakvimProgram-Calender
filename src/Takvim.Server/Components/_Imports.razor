@@ -1,0 +1,26 @@
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.JSInterop
+@using NodaTime
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+
+@using Takvim.Core.Domain
+@using Takvim.Core.Localization
+@using Takvim.Core.Layout
+@using Takvim.Core.Recurrence
+@using Takvim.Core.Time
+@using Microsoft.EntityFrameworkCore
+@using Takvim.Data.Services
+
+@using Takvim.Server
+@using Takvim.Server.Components
+@using Takvim.Server.Components.Layout
+@using Takvim.Server.Components.Calendar
+@using Takvim.Server.State
+
+@* System.Globalization.Calendar ile çakışmayı önler: bileşenlerde "Calendar"
+   her zaman bizim takvim varlığımızdır. *@
+@using Calendar = Takvim.Core.Domain.Calendar

@@ -1,0 +1,601 @@
+@page "/"
+@page "/takvim"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+
+@using Microsoft.AspNetCore.WebUtilities
+
+<PageTitle>@State.View.Title — Takvim</PageTitle>
+
+<CascadingValue Value="State">
+    <div class="uygulama">
+
+        <div class="marka">
+            <span aria-hidden="true" style="font-size:20px">📅</span>
+            <span class="marka__ad">Takvim</span>
+        </div>
+
+        <TopBar />
+
+        <Sidebar OnCreate="() => OpenQuickCreate(null)"
+                 OnOpenTrash="() => _panel = Panel.Trash"
+                 OnOpenImportExport="() => _panel = Panel.ImportExport"
+                 OnOpenShortcuts="() => _panel = Panel.Shortcuts" />
+
+        <main class="icerik">
+            @if (State.IsLoading)
+            {
+                <div class="yukleniyor-cizgisi" role="status" aria-label="Yükleniyor"></div>
+            }
+
+            @switch (State.View.Kind)
+            {
+                case CalendarViewKind.Month:
+                    <MonthGrid OnActivate="Activate" OnCreateSlot="OnCreateSlot" />
+                    break;
+
+                case CalendarViewKind.Year:
+                    <YearGrid />
+                    break;
+
+                case CalendarViewKind.Schedule:
+                    <ScheduleList OnActivate="Activate" />
+                    break;
+
+                default:
+                    <TimeGrid OnActivate="Activate"
+                              OnCreateSlot="OnCreateSlot"
+                              OnMove="OnMove"
+                              OnResize="OnResize" />
+                    break;
+            }
+        </main>
+    </div>
+
+    @if (_preview is { } preview)
+    {
+        <EventPreview Occurrence="preview.Occurrence"
+                      PositionStyle="@_previewPosition"
+                      OnEdit="() => EditFromPreview()"
+                      OnDuplicate="Duplicate"
+                      OnDelete="DeleteFromPreview"
+                      OnClose="ClosePreview" />
+    }
+
+    @if (_panel == Panel.QuickCreate)
+    {
+        <QuickCreate InitialStart="_quickCreateStart"
+                     OnSave="SaveDraft"
+                     OnExpand="ExpandToEditor"
+                     OnCancel="CloseAll" />
+    }
+
+    @if (_panel == Panel.Editor && _draft is not null)
+    {
+        <EventEditor Draft="_draft"
+                     OnSave="SaveDraft"
+                     OnDelete="DeleteFromEditor"
+                     OnCancel="CloseAll" />
+    }
+
+    @if (_panel == Panel.Trash)
+    {
+        <TrashPanel OnClose="CloseAll" OnChanged="() => State.ReloadAsync()" />
+    }
+
+    @if (_panel == Panel.ImportExport)
+    {
+        <ImportExportDialog OnClose="CloseAll" OnChanged="() => State.ReloadAsync()" />
+    }
+
+    @if (_panel == Panel.Shortcuts)
+    {
+        <ShortcutHelp OnClose="CloseAll" />
+    }
+
+    @if (_pendingScope is not null)
+    {
+        <ScopeDialog IsDelete="_pendingScopeIsDelete"
+                     OnConfirm="ApplyScope"
+                     OnCancel="() => { _pendingScope = null; StateHasChanged(); }" />
+    }
+
+    <NotificationBar />
+    <ReminderToast />
+</CascadingValue>
+
+@code {
+    [Inject] public required CalendarUiState State { get; set; }
+    [Inject] public required NavigationManager Nav { get; set; }
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+    [Inject] public required IJSRuntime Js { get; set; }
+
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts }
+
+    private Panel _panel = Panel.None;
+
+    private EventActivation? _preview;
+    private string _previewPosition = "";
+    private EventDraft? _draft;
+    private LocalDateTime? _quickCreateStart;
+
+    /// <summary>Tekrarlayan bir etkinliğe uygulanacak, kapsam seçimini bekleyen işlem.</summary>
+    private Func<SeriesEditScope, Task>? _pendingScope;
+    private bool _pendingScopeIsDelete;
+
+    private DotNetObjectReference<TakvimSayfasi>? _selfReference;
+    private bool _shortcutsRegistered;
+
+    // ==================================================================
+    // Yaşam döngüsü
+    // ==================================================================
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnStateChanged;
+
+        var query = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query)
+            .ToDictionary(kv => kv.Key, kv => (string?)kv.Value.ToString(), StringComparer.Ordinal);
+
+        // İlk durum adres çubuğundan okunur; paylaşılan bağlantı aynı görünümü açar.
+        var today = LocalDate.FromDateTime(DateTime.Today);
+        await State.InitializeAsync(CalendarViewState.FromQuery(query, today));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _shortcutsRegistered) return;
+
+        _shortcutsRegistered = true;
+        _selfReference = DotNetObjectReference.Create(this);
+        await Js.InvokeVoidAsync("takvim.registerShortcuts", _selfReference);
+
+        if (State.View.Density == GridDensity.Compact)
+            await Js.InvokeVoidAsync("takvim.setDensity", "kompakt");
+    }
+
+    /// <summary>Durum değişince yeniden çizer ve adres çubuğunu günceller.</summary>
+    private void OnStateChanged()
+    {
+        InvokeAsync(() =>
+        {
+            SyncUrl();
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>
+    /// Görünüm durumunu adres çubuğuna yazar. Sayfa yeniden yüklenmez;
+    /// yalnızca geçmiş kaydı güncellenir, böylece paylaşılan bağlantı çalışır.
+    /// </summary>
+    private void SyncUrl()
+    {
+        // Ön çizim sırasında gezinmek yönlendirmeye dönüşür ve bileşen iki kez
+        // kurulur. Adres eşitlemesi yalnızca etkileşimli devrede yapılır.
+        if (!RendererInfo.IsInteractive) return;
+
+        var target = "/takvim" + State.View.ToQueryString();
+        var current = new Uri(Nav.Uri).PathAndQuery;
+
+        if (!string.Equals(current, target, StringComparison.Ordinal))
+        {
+            Nav.NavigateTo(target, forceLoad: false, replace: true);
+        }
+    }
+
+    // ==================================================================
+    // Klavye
+    // ==================================================================
+
+    /// <summary>Tarayıcıdan gelen tuş vuruşu. İşlendiyse true döner ve olay engellenir.</summary>
+    [JSInvokable]
+    public async Task<bool> HandleKey(string key, bool shift)
+    {
+        // Açık bir pencere varsa yalnızca Esc çalışır.
+        if (_panel != Panel.None || _preview is not null || _pendingScope is not null)
+        {
+            if (key != "Escape") return false;
+
+            CloseAll();
+            return true;
+        }
+
+        switch (key)
+        {
+            case "c" or "C":
+                if (shift) OpenFullEditor(null);
+                else OpenQuickCreate(null);
+                break;
+
+            case "g" or "G": await SetKind(CalendarViewKind.Day); break;
+            case "h" or "H": await SetKind(CalendarViewKind.Week); break;
+            case "i" or "I" or "İ" or "ı": await SetKind(CalendarViewKind.WorkWeek); break;
+            case "x" or "X": await SetKind(CalendarViewKind.Days); break;
+            case "a" or "A": await SetKind(CalendarViewKind.Month); break;
+            case "y" or "Y": await SetKind(CalendarViewKind.Year); break;
+            case "z" or "Z": await SetKind(CalendarViewKind.Schedule); break;
+
+            case "p" or "P" or "ArrowLeft": await State.ShiftAsync(-1); break;
+            case "n" or "N" or "ArrowRight": await State.ShiftAsync(1); break;
+            case "b" or "B" or "t" or "T": await State.GoToTodayAsync(); break;
+
+            case "/":
+                await Js.InvokeVoidAsync("takvim.focus", "#arama-alani");
+                break;
+
+            case "?":
+                _panel = Panel.Shortcuts;
+                break;
+
+            default:
+                return false;
+        }
+
+        StateHasChanged();
+        return true;
+    }
+
+    private Task SetKind(CalendarViewKind kind) => State.SetViewAsync(State.View.WithKind(kind));
+
+    // ==================================================================
+    // Önizleme
+    // ==================================================================
+
+    private async Task Activate(EventActivation activation)
+    {
+        _preview = activation;
+        _previewPosition = await ComputePreviewPosition(activation);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Önizleme kartını tıklanan etkinliğin yanına yerleştirir; ekrandan taşacaksa
+    /// öbür tarafa geçirir. Ölçü alınamazsa ortalanır.
+    /// </summary>
+    private async Task<string> ComputePreviewPosition(EventActivation activation)
+    {
+        const int cardWidth = 352;
+        const int cardHeight = 320;
+        const int gap = 10;
+
+        try
+        {
+            var rect = await Js.InvokeAsync<Rect?>("takvim.getRect", activation.Element);
+            if (rect is null) return CenteredPosition;
+
+            var left = rect.Right + gap;
+            if (left + cardWidth > rect.ViewportWidth) left = rect.Left - cardWidth - gap;
+            if (left < gap) left = Math.Max(gap, (rect.ViewportWidth - cardWidth) / 2);
+
+            var top = rect.Top;
+            if (top + cardHeight > rect.ViewportHeight) top = rect.ViewportHeight - cardHeight - gap;
+            if (top < gap) top = gap;
+
+            return $"top:{top:0}px;left:{left:0}px";
+        }
+        catch (JSException)
+        {
+            return CenteredPosition;
+        }
+    }
+
+    private const string CenteredPosition = "top:50%;left:50%;transform:translate(-50%,-50%)";
+
+    private sealed record Rect(
+        double Top, double Left, double Right, double Bottom,
+        double Width, double Height, double ViewportWidth, double ViewportHeight);
+
+    private void ClosePreview()
+    {
+        _preview = null;
+        StateHasChanged();
+    }
+
+    // ==================================================================
+    // Oluşturma
+    // ==================================================================
+
+    private void OpenQuickCreate(LocalDateTime? start)
+    {
+        _quickCreateStart = start;
+        _preview = null;
+        _panel = Panel.QuickCreate;
+        StateHasChanged();
+    }
+
+    private void OpenFullEditor(LocalDateTime? start)
+    {
+        var calendar = State.DefaultCalendar;
+        if (calendar is null) return;
+
+        var begin = start ?? RoundedNow();
+
+        _draft = EventDraft.ForNewEvent(
+            calendar.Id, begin, begin.PlusHours(1), allDay: false,
+            State.ZoneId, calendar.DefaultReminderMinutes);
+
+        _preview = null;
+        _panel = Panel.Editor;
+        StateHasChanged();
+    }
+
+    /// <summary>Şimdiki saati yarım saatlik dilime yuvarlar.</summary>
+    private LocalDateTime RoundedNow()
+    {
+        var now = State.Now;
+        var minutes = now.Minute < 30 ? 30 : 60;
+        return now.Date.At(new LocalTime(now.Hour, 0)).PlusMinutes(minutes);
+    }
+
+    private void OnCreateSlot((LocalDateTime Start, LocalDateTime End, bool AllDay) slot)
+    {
+        var calendar = State.DefaultCalendar;
+        if (calendar is null) return;
+
+        if (slot.AllDay)
+        {
+            // Tüm gün etkinliğinde hızlı karta gerek yok; doğrudan düzenleyici açılır.
+            _draft = EventDraft.ForNewEvent(
+                calendar.Id, slot.Start, slot.End, allDay: true,
+                State.ZoneId, calendar.DefaultAllDayReminderMinutes);
+
+            _panel = Panel.Editor;
+            StateHasChanged();
+            return;
+        }
+
+        OpenQuickCreate(slot.Start);
+    }
+
+    private void ExpandToEditor(EventDraft draft)
+    {
+        _draft = draft;
+        _panel = Panel.Editor;
+        StateHasChanged();
+    }
+
+    // ==================================================================
+    // Kaydetme
+    // ==================================================================
+
+    private async Task SaveDraft(EventDraft draft)
+    {
+        if (draft.IsNew)
+        {
+            await RunWrite(async events =>
+                await events.CreateAsync(draft.ToInput(CalendarBootstrapper.LocalUserId)),
+                "Etkinlik oluşturuldu.");
+
+            CloseAll();
+            return;
+        }
+
+        // Var olan bir seride kapsam sorulmalı.
+        if (draft.BelongsToSeries)
+        {
+            _draft = draft;
+            AskScope(isDelete: false, async scope =>
+            {
+                await RunWrite(async events => await events.UpdateAsync(
+                    draft.EventId!.Value, draft.RecurrenceId, scope,
+                    draft.ToInput(CalendarBootstrapper.LocalUserId)),
+                    "Etkinlik güncellendi.");
+            });
+            return;
+        }
+
+        await RunWrite(async events => await events.UpdateAsync(
+            draft.EventId!.Value, null, SeriesEditScope.AllInSeries,
+            draft.ToInput(CalendarBootstrapper.LocalUserId)),
+            "Etkinlik güncellendi.");
+
+        CloseAll();
+    }
+
+    private void EditFromPreview()
+    {
+        if (_preview is not { } activation) return;
+
+        _draft = EventDraft.FromOccurrence(activation.Occurrence, State.ZoneId);
+        _preview = null;
+        _panel = Panel.Editor;
+        StateHasChanged();
+    }
+
+    private async Task Duplicate()
+    {
+        if (_preview is not { } activation) return;
+
+        var draft = EventDraft.FromOccurrence(activation.Occurrence, State.ZoneId);
+
+        // Kopya bağımsız bir etkinliktir: seriye bağlı değildir ve yeni kayıt olarak açılır.
+        draft.EventId = null;
+        draft.RecurrenceId = null;
+        draft.BelongsToSeries = false;
+        draft.RecurrencePreset = RecurrencePreset.None;
+        draft.CustomRecurrenceRule = null;
+        draft.Title += " (kopya)";
+
+        _preview = null;
+
+        await RunWrite(async events =>
+            await events.CreateAsync(draft.ToInput(CalendarBootstrapper.LocalUserId)),
+            "Etkinlik çoğaltıldı.");
+    }
+
+    // ==================================================================
+    // Silme
+    // ==================================================================
+
+    private Task DeleteFromPreview()
+    {
+        if (_preview is not { } activation) return Task.CompletedTask;
+
+        var occurrence = activation.Occurrence;
+        _preview = null;
+
+        return RequestDelete(occurrence);
+    }
+
+    private Task DeleteFromEditor()
+    {
+        if (_draft is not { EventId: { } id } draft) return Task.CompletedTask;
+
+        if (draft.BelongsToSeries)
+        {
+            AskScope(isDelete: true, async scope =>
+            {
+                await RunWrite(async events => await events.DeleteAsync(
+                    id, draft.RecurrenceId, scope, CalendarBootstrapper.LocalUserId),
+                    "Etkinlik silindi.");
+            });
+            return Task.CompletedTask;
+        }
+
+        return RunWriteAndClose(async events => await events.DeleteAsync(
+            id, null, SeriesEditScope.AllInSeries, CalendarBootstrapper.LocalUserId),
+            "Etkinlik silindi.");
+    }
+
+    private Task RequestDelete(EventOccurrence occurrence)
+    {
+        if (occurrence.IsRecurring)
+        {
+            AskScope(isDelete: true, async scope =>
+            {
+                await RunWrite(async events => await events.DeleteAsync(
+                    occurrence.SeriesRootId, occurrence.RecurrenceId, scope,
+                    CalendarBootstrapper.LocalUserId),
+                    "Etkinlik silindi.");
+            });
+            return Task.CompletedTask;
+        }
+
+        return RunWriteAndClose(async events => await events.DeleteAsync(
+            occurrence.EventId, null, SeriesEditScope.AllInSeries, CalendarBootstrapper.LocalUserId),
+            "Etkinlik silindi.");
+    }
+
+    // ==================================================================
+    // Sürükleyerek taşıma ve süre değiştirme
+    // ==================================================================
+
+    private Task OnMove((EventOccurrence Occurrence, LocalDateTime NewStart) move)
+    {
+        var (occurrence, newStart) = move;
+
+        // Süre korunur: kullanıcı kartı taşırken uzunluğunu değiştirmek istemez.
+        var length = occurrence.EndLocal - occurrence.StartLocal;
+        return ApplyTimeChange(occurrence, newStart, newStart + length);
+    }
+
+    private Task OnResize((EventOccurrence Occurrence, LocalDateTime NewEnd) resize)
+        => ApplyTimeChange(resize.Occurrence, resize.Occurrence.StartLocal, resize.NewEnd);
+
+    private Task ApplyTimeChange(EventOccurrence occurrence, LocalDateTime start, LocalDateTime end)
+    {
+        var calendar = State.CalendarOf(occurrence.Source.CalendarId);
+        if (calendar?.IsReadOnly == true)
+        {
+            State.ShowStatus("Bu takvim salt okunur.");
+            return Task.CompletedTask;
+        }
+
+        var draft = EventDraft.FromOccurrence(occurrence, State.ZoneId);
+        draft.SetStart(start);
+        draft.SetEnd(end);
+
+        var input = draft.ToInput(CalendarBootstrapper.LocalUserId);
+
+        if (occurrence.IsRecurring)
+        {
+            AskScope(isDelete: false, async scope =>
+            {
+                await RunWrite(async events => await events.UpdateAsync(
+                    occurrence.SeriesRootId, occurrence.RecurrenceId, scope, input),
+                    "Etkinlik taşındı.");
+            });
+            return Task.CompletedTask;
+        }
+
+        return RunWriteAndClose(async events => await events.UpdateAsync(
+            occurrence.EventId, null, SeriesEditScope.AllInSeries, input),
+            "Etkinlik taşındı.");
+    }
+
+    // ==================================================================
+    // Kapsam sorusu
+    // ==================================================================
+
+    private void AskScope(bool isDelete, Func<SeriesEditScope, Task> action)
+    {
+        _pendingScopeIsDelete = isDelete;
+        _pendingScope = action;
+        _panel = Panel.None;
+        _preview = null;
+        StateHasChanged();
+    }
+
+    private async Task ApplyScope(SeriesEditScope scope)
+    {
+        if (_pendingScope is not { } action) return;
+
+        _pendingScope = null;
+        await action(scope);
+        CloseAll();
+    }
+
+    // ==================================================================
+    // Ortak yazma yolu
+    // ==================================================================
+
+    /// <summary>
+    /// Bir yazma işlemini kendi kapsamında çalıştırır, görünümü tazeler ve
+    /// geri alma şeridini gösterir. Her yıkıcı işlem bu yoldan geçer.
+    /// </summary>
+    private async Task RunWrite(Func<EventService, Task<EventWriteResult>> work, string message)
+    {
+        EventWriteResult result;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var events = scope.ServiceProvider.GetRequiredService<EventService>();
+            result = await work(events);
+        }
+
+        await State.ReloadAsync();
+        State.ShowUndo(result.UndoToken, message);
+    }
+
+    private async Task RunWriteAndClose(Func<EventService, Task<EventWriteResult>> work, string message)
+    {
+        await RunWrite(work, message);
+        CloseAll();
+    }
+
+    private void CloseAll()
+    {
+        _panel = Panel.None;
+        _preview = null;
+        _draft = null;
+        _pendingScope = null;
+        _quickCreateStart = null;
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        State.Changed -= OnStateChanged;
+
+        try
+        {
+            if (_shortcutsRegistered) await Js.InvokeVoidAsync("takvim.unregisterShortcuts");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Devre zaten kapanmış; temizlenecek bir şey yok.
+        }
+
+        _selfReference?.Dispose();
+    }
+}

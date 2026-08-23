@@ -1,0 +1,159 @@
+@* Bir etkinlik örneğinin görsel kartı. Üç biçimde çizilir:
+   Block  — zaman ızgarasında mutlak konumlu dikdörtgen
+   Band   — tüm gün şeridi ve ay görünümündeki yatay şerit
+   Row    — ay ve zamanlama görünümündeki nokta + saat + başlık satırı *@
+
+<div class="@CssClass" style="@Style" @onclick:stopPropagation="true" @onclick="Activate"
+     draggable="@(Draggable ? "true" : "false")"
+     @ondragstart="() => OnDragStarted.InvokeAsync()"
+     role="button"
+     tabindex="0"
+     @onkeydown="OnKeyDown"
+     aria-label="@AriaLabel"
+     title="@Tooltip"
+     @ref="_element">
+
+    @if (Variant == ChipVariant.Row)
+    {
+        <span class="renk-noktasi"></span>
+        @if (ShowTime && !Occurrence.IsAllDay)
+        {
+            <span class="olay__saat">@TurkishFormat.Time(Occurrence.StartLocal)</span>
+        }
+        <span class="olay__baslik">@DisplayTitle</span>
+    }
+    else if (Variant == ChipVariant.Band)
+    {
+        @if (Continues)
+        {
+            <span aria-hidden="true">◄</span>
+        }
+        <span class="olay__baslik">@DisplayTitle</span>
+    }
+    else if (Compact)
+    {
+        @* Kısa etkinlik: başlık ve saat tek satırda. *@
+        <span class="olay__baslik">@DisplayTitle</span>
+        <span class="olay__saat">@TurkishFormat.Time(Occurrence.StartLocal)</span>
+    }
+    else
+    {
+        <span class="olay__baslik">@DisplayTitle</span>
+        <span class="olay__saat">
+            @TurkishFormat.OccurrenceTime(Occurrence.StartLocal, Occurrence.EndLocal, Occurrence.IsAllDay)
+        </span>
+        @if (!string.IsNullOrWhiteSpace(Occurrence.Source.LocationText))
+        {
+            <span class="olay__konum">@Occurrence.Source.LocationText</span>
+        }
+    }
+
+    @if (Variant == ChipVariant.Block && OnResizeStarted.HasDelegate)
+    {
+        @* Alt kenardan çekerek süre uzatma tutamağı. *@
+        <div class="olay__tutamac"
+             draggable="true"
+             @ondragstart:stopPropagation="true"
+             @ondragstart="() => OnResizeStarted.InvokeAsync()"
+             @onclick:stopPropagation="true"
+             aria-hidden="true"
+             style="position:absolute;left:0;right:0;bottom:0;height:6px;cursor:ns-resize"></div>
+    }
+</div>
+
+@code {
+    public enum ChipVariant { Block, Band, Row }
+
+    [Parameter, EditorRequired] public required EventOccurrence Occurrence { get; set; }
+
+    [Parameter] public ChipVariant Variant { get; set; } = ChipVariant.Block;
+
+    /// <summary>Palet anahtarı ya da #RRGGBB.</summary>
+    [Parameter] public string Color { get; set; } = "peacock";
+
+    [Parameter] public string? Style { get; set; }
+
+    /// <summary>Kart çok kısaysa başlık ve saat tek satıra sıkıştırılır.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    [Parameter] public bool ShowTime { get; set; } = true;
+
+    /// <summary>Çok günlü bir etkinliğin devam eden günü mü.</summary>
+    [Parameter] public bool Continues { get; set; }
+
+    [Parameter] public bool Draggable { get; set; }
+
+    [Parameter] public EventCallback<EventActivation> OnActivate { get; set; }
+    [Parameter] public EventCallback OnDragStarted { get; set; }
+    [Parameter] public EventCallback OnResizeStarted { get; set; }
+
+    private ElementReference _element;
+
+    private string DisplayTitle => string.IsNullOrWhiteSpace(Occurrence.Source.Title)
+        ? "(başlıksız)"
+        : Occurrence.Source.Title;
+
+    private string CssClass
+    {
+        get
+        {
+            var classes = new List<string> { "olay" };
+
+            classes.Add(Variant switch
+            {
+                ChipVariant.Band => "olay--serit",
+                ChipVariant.Row => "olay--satir",
+                _ => Compact ? "olay--kisa" : "olay--blok",
+            });
+
+            // Renk sınıfı palet anahtarıysa CSS'ten, değilse satır içi stilden gelir.
+            if (!Color.StartsWith('#')) classes.Add("renk-" + Color);
+
+            switch (Occurrence.Source.Availability)
+            {
+                case Availability.Free: classes.Add("olay--musait"); break;
+                case Availability.Tentative: classes.Add("olay--belirsiz"); break;
+                default: break;
+            }
+
+            if (Occurrence.Source.Status == EventStatus.Cancelled) classes.Add("olay--iptal");
+
+            return string.Join(' ', classes);
+        }
+    }
+
+    private string Tooltip
+    {
+        get
+        {
+            var time = TurkishFormat.OccurrenceTime(Occurrence.StartLocal, Occurrence.EndLocal, Occurrence.IsAllDay);
+            var location = string.IsNullOrWhiteSpace(Occurrence.Source.LocationText)
+                ? "" : "\n" + Occurrence.Source.LocationText;
+            return $"{DisplayTitle}\n{time}{location}";
+        }
+    }
+
+    private string AriaLabel
+    {
+        get
+        {
+            var time = TurkishFormat.OccurrenceTime(Occurrence.StartLocal, Occurrence.EndLocal, Occurrence.IsAllDay);
+            var repeat = Occurrence.IsRecurring ? ", tekrarlayan" : "";
+            return $"{DisplayTitle}, {TurkishFormat.LongDate(Occurrence.StartLocal.Date)}, {time}{repeat}";
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Serbest renk kodu verildiyse CSS değişkeni satır içinde ayarlanır.
+        if (Color.StartsWith('#'))
+        {
+            Style = $"--olay-renk:{Color};" + Style;
+        }
+    }
+
+    private Task Activate() => OnActivate.InvokeAsync(new EventActivation(Occurrence, _element));
+
+    private Task OnKeyDown(KeyboardEventArgs e)
+        => e.Key is "Enter" or " " ? Activate() : Task.CompletedTask;
+}

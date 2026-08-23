@@ -1,0 +1,75 @@
+@* Klavye kısayolları listesi. "?" tuşuyla açılır. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="kutu" style="width:min(620px, calc(100vw - 32px))" role="dialog" aria-modal="true"
+     aria-labelledby="kisayol-basligi">
+
+    <h2 class="kutu__baslik" id="kisayol-basligi">Klavye kısayolları</h2>
+
+    <div class="kisayol-listesi">
+        @foreach (var group in Groups)
+        {
+            <div class="kisayol-grubu">
+                <h3>@group.Title</h3>
+                @foreach (var (keys, description) in group.Items)
+                {
+                    <div class="kisayol">
+                        <span>@description</span>
+                        <span style="display:flex;gap:3px">
+                            @foreach (var key in keys)
+                            {
+                                <kbd>@key</kbd>
+                            }
+                        </span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="kutu__dugmeler">
+        <button class="dugme dugme--birincil" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private static readonly (string Title, (string[] Keys, string Description)[] Items)[] Groups =
+    [
+        ("Oluşturma",
+        [
+            (["C"], "Hızlı oluştur"),
+            (["Shift", "C"], "Ayrıntılı düzenleyiciyle oluştur"),
+        ]),
+
+        ("Görünüm",
+        [
+            (["G"], "Gün"),
+            (["H"], "Hafta"),
+            (["İ"], "İş haftası"),
+            (["X"], "N gün"),
+            (["A"], "Ay"),
+            (["Y"], "Yıl"),
+            (["Z"], "Zamanlama listesi"),
+        ]),
+
+        ("Gezinme",
+        [
+            (["P"], "Önceki dönem"),
+            (["N"], "Sonraki dönem"),
+            (["B"], "Bugüne dön"),
+            (["←"], "Önceki dönem"),
+            (["→"], "Sonraki dönem"),
+        ]),
+
+        ("Diğer",
+        [
+            (["/"], "Aramaya git"),
+            (["?"], "Bu listeyi aç"),
+            (["Esc"], "Açık pencereyi kapat"),
+            (["Ctrl", "Z"], "Son işlemi geri al"),
+        ]),
+    ];
+}

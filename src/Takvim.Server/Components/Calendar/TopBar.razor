@@ -1,0 +1,196 @@
+@* Üst çubuk: gezinme, görünüm seçimi, arama ve görünüm ayarları. *@
+
+<header class="ust-cubuk">
+
+    <button class="dugme" @onclick="() => State.GoToTodayAsync()" title="Bugüne dön (B)">Bugün</button>
+
+    <nav class="gezinme" aria-label="Dönem gezinmesi">
+        <button class="dugme dugme--simge" title="Önceki (P)" aria-label="Önceki dönem"
+                @onclick="() => State.ShiftAsync(-1)">‹</button>
+        <button class="dugme dugme--simge" title="Sonraki (N)" aria-label="Sonraki dönem"
+                @onclick="() => State.ShiftAsync(1)">›</button>
+    </nav>
+
+    <h1 class="ust-cubuk__baslik">@State.View.Title</h1>
+
+    <div class="ust-cubuk__bosluk"></div>
+
+    <div class="arama">
+        <span class="arama__simge" aria-hidden="true">⌕</span>
+        <input class="alan"
+               id="arama-alani"
+               type="search"
+               placeholder="Ara"
+               aria-label="Etkinliklerde ara"
+               value="@State.View.SearchTerm"
+               @oninput="OnSearchInput" />
+    </div>
+
+    <div class="gorunum-secici" role="group" aria-label="Görünüm seçimi">
+        @foreach (var (kind, label, key) in Views)
+        {
+            <button type="button"
+                    aria-current="@(State.View.Kind == kind ? "true" : "false")"
+                    title="@label (@key)"
+                    @onclick="() => SetKind(kind)">@label</button>
+        }
+    </div>
+
+    @if (State.View.Kind == CalendarViewKind.Days)
+    {
+        <select class="alan" style="width:78px" aria-label="Gün sayısı"
+                value="@State.View.DayCount"
+                @onchange="OnDayCountChanged">
+            @for (var days = 2; days <= 7; days++)
+            {
+                <option value="@days">@days gün</option>
+            }
+        </select>
+    }
+
+    <button class="dugme dugme--simge" title="Görünüm ayarları" aria-label="Görünüm ayarları"
+            aria-expanded="@(_settingsOpen ? "true" : "false")"
+            @onclick="() => _settingsOpen = !_settingsOpen">⚙</button>
+
+</header>
+
+@if (_settingsOpen)
+{
+    <div class="perde" style="background:transparent" @onclick="() => _settingsOpen = false"></div>
+
+    <div class="kutu" style="top:auto;left:auto;right:14px;transform:none;top:66px;width:280px" role="dialog"
+         aria-label="Görünüm ayarları">
+        <h2 class="kutu__baslik" style="font-size:15px">Görünüm ayarları</h2>
+
+        <div>
+            <span class="etiket">Yoğunluk</span>
+            <div class="gorunum-secici">
+                <button type="button" aria-current="@Pressed(State.View.Density == GridDensity.Comfortable)"
+                        @onclick="() => SetDensity(GridDensity.Comfortable)">Rahat</button>
+                <button type="button" aria-current="@Pressed(State.View.Density == GridDensity.Compact)"
+                        @onclick="() => SetDensity(GridDensity.Compact)">Kompakt</button>
+            </div>
+        </div>
+
+        <div>
+            <span class="etiket">Birden çok takvim</span>
+            <div class="gorunum-secici">
+                <button type="button" aria-current="@Pressed(State.View.DisplayMode == CalendarDisplayMode.Overlay)"
+                        @onclick="() => SetMode(CalendarDisplayMode.Overlay)">Üst üste</button>
+                <button type="button" aria-current="@Pressed(State.View.DisplayMode == CalendarDisplayMode.Columns)"
+                        @onclick="() => SetMode(CalendarDisplayMode.Columns)">Yan yana</button>
+            </div>
+        </div>
+
+        <label class="liste-ogesi" style="padding-left:0">
+            <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                   checked="@State.View.HideWeekends"
+                   @onchange="ToggleWeekends" />
+            <span class="liste-ogesi__ad">Hafta sonlarını gizle</span>
+        </label>
+
+        <div>
+            <span class="etiket">Tema</span>
+            <div class="gorunum-secici">
+                <button type="button" aria-current="@Pressed(_theme == "acik")"
+                        @onclick="@(() => SetTheme("acik"))">Açık</button>
+                <button type="button" aria-current="@Pressed(_theme == "koyu")"
+                        @onclick="@(() => SetTheme("koyu"))">Koyu</button>
+            </div>
+        </div>
+
+        <button class="dugme" @onclick="Print">Yazdır</button>
+    </div>
+}
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IJSRuntime Js { get; set; }
+
+    private bool _settingsOpen;
+    private string _theme = "acik";
+
+    /// <summary>Görünüm düğmeleri ve klavye kısayolları; ikisi tek yerden tanımlanır.</summary>
+    private static readonly (CalendarViewKind Kind, string Label, string Key)[] Views =
+    [
+        (CalendarViewKind.Day, "Gün", "G"),
+        (CalendarViewKind.Week, "Hafta", "H"),
+        (CalendarViewKind.WorkWeek, "İş haftası", "İ"),
+        (CalendarViewKind.Days, "N gün", "X"),
+        (CalendarViewKind.Month, "Ay", "A"),
+        (CalendarViewKind.Year, "Yıl", "Y"),
+        (CalendarViewKind.Schedule, "Zamanlama", "Z"),
+    ];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _theme = await Js.InvokeAsync<string>("takvim.getTheme");
+        StateHasChanged();
+    }
+
+    private static string Pressed(bool value) => value ? "true" : "false";
+
+    private Task SetKind(CalendarViewKind kind) => State.SetViewAsync(State.View.WithKind(kind));
+
+    private async Task SetDensity(GridDensity density)
+    {
+        await Js.InvokeVoidAsync("takvim.setDensity", density == GridDensity.Compact ? "kompakt" : "rahat");
+        await State.SetViewAsync(State.View with { Density = density });
+    }
+
+    private Task SetMode(CalendarDisplayMode mode)
+        => State.SetViewAsync(State.View with { DisplayMode = mode });
+
+    private Task ToggleWeekends()
+        => State.SetViewAsync(State.View with { HideWeekends = !State.View.HideWeekends });
+
+    private async Task SetTheme(string theme)
+    {
+        _theme = theme;
+        await Js.InvokeVoidAsync("takvim.setTheme", theme);
+    }
+
+    private Task OnDayCountChanged(ChangeEventArgs e)
+    {
+        var count = int.TryParse(e.Value?.ToString(), out var parsed) ? parsed : 3;
+        return State.SetViewAsync(State.View with { DayCount = Math.Clamp(count, 2, 7) });
+    }
+
+    private CancellationTokenSource? _searchDebounce;
+
+    /// <summary>
+    /// Arama her tuş vuruşunda değil, yazma durduktan sonra çalışır.
+    /// Aksi hâlde her harfte veritabanı sorgusu tetiklenir.
+    /// </summary>
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        var term = e.Value?.ToString();
+
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+        _searchDebounce = new CancellationTokenSource();
+        var token = _searchDebounce.Token;
+
+        try
+        {
+            await Task.Delay(280, token);
+            await State.SetViewAsync(State.View with
+            {
+                SearchTerm = string.IsNullOrWhiteSpace(term) ? null : term,
+            }, token);
+        }
+        catch (TaskCanceledException)
+        {
+            // Kullanıcı yazmaya devam etti; bu arama iptal edildi.
+        }
+    }
+
+    private async Task Print()
+    {
+        _settingsOpen = false;
+        await Js.InvokeVoidAsync("takvim.print");
+    }
+}

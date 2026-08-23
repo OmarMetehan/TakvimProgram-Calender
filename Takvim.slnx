@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Takvim.Core/Takvim.Core.csproj" />
+    <Project Path="src/Takvim.Data/Takvim.Data.csproj" />
+    <Project Path="src/Takvim.Desktop/Takvim.Desktop.csproj" />
+    <Project Path="src/Takvim.Server/Takvim.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Takvim.Core.Tests/Takvim.Core.Tests.csproj" />
+    <Project Path="tests/Takvim.Data.Tests/Takvim.Data.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,168 @@
+@* Etkinliğe tıklayınca açılan önizleme kartı. Detay sayfası yerine buradan bakılır. *@
+
+<div class="perde" style="background:transparent" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="onizleme renk-@Color" style="@PositionStyle" role="dialog" aria-label="Etkinlik önizlemesi">
+
+    <div class="onizleme__ust">
+        <span class="onizleme__renk"></span>
+        <h2 class="onizleme__baslik">
+            @(string.IsNullOrWhiteSpace(Occurrence.Source.Title) ? "(başlıksız)" : Occurrence.Source.Title)
+        </h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div>
+        <div class="onizleme__zaman">
+            @TurkishFormat.DayName(Occurrence.StartLocal.Date), @TurkishFormat.LongDate(Occurrence.StartLocal.Date)
+        </div>
+        <div class="onizleme__zaman">
+            @TurkishFormat.OccurrenceTime(Occurrence.StartLocal, Occurrence.EndLocal, Occurrence.IsAllDay)
+            @if (!Occurrence.IsAllDay)
+            {
+                <span style="color:var(--metin-3)">
+                    · @TurkishFormat.Duration(Occurrence.EndUtc - Occurrence.StartUtc)
+                </span>
+            }
+        </div>
+    </div>
+
+    @if (Occurrence.IsRecurring)
+    {
+        <div class="onizleme__satir">
+            <span aria-hidden="true">↻</span>
+            <span>
+                @RecurrenceText
+                @if (Occurrence.IsException)
+                {
+                    <span style="color:var(--metin-3)"> · bu örnek düzenlenmiş</span>
+                }
+            </span>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Occurrence.Source.LocationText))
+    {
+        <div class="onizleme__satir">
+            <span aria-hidden="true">📍</span>
+            <span>@Occurrence.Source.LocationText</span>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Occurrence.Source.OnlineMeetingUrl))
+    {
+        <div class="onizleme__satir">
+            <span aria-hidden="true">🔗</span>
+            <a href="@Occurrence.Source.OnlineMeetingUrl" target="_blank" rel="noopener noreferrer">
+                Toplantıya katıl
+            </a>
+        </div>
+    }
+
+    <div class="onizleme__satir">
+        <span aria-hidden="true">📅</span>
+        <span>@(CalendarName ?? "Takvim")</span>
+    </div>
+
+    @if (Occurrence.Source.Availability != Availability.Busy)
+    {
+        <div class="onizleme__satir">
+            <span aria-hidden="true">◐</span>
+            <span>@AvailabilityText</span>
+        </div>
+    }
+
+    @if (Categories.Count > 0)
+    {
+        <div class="onizleme__satir">
+            <span aria-hidden="true">🏷</span>
+            <span style="display:flex;gap:5px;flex-wrap:wrap">
+                @foreach (var category in Categories)
+                {
+                    <span class="rozet renk-@category.Color">
+                        <span class="renk-noktasi" style="width:8px;height:8px;border-radius:50%"></span>
+                        @category.Name
+                    </span>
+                }
+            </span>
+        </div>
+    }
+
+    @if (Reminders.Count > 0)
+    {
+        <div class="onizleme__satir">
+            <span aria-hidden="true">🔔</span>
+            <span>@string.Join(", ", Reminders.Select(r => TurkishFormat.ReminderOffset(r.MinutesBefore)))</span>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <div class="onizleme__satir" style="max-height:120px;overflow-y:auto">
+            <span aria-hidden="true">☰</span>
+            <span style="white-space:pre-wrap">@Description</span>
+        </div>
+    }
+
+    <div class="onizleme__dugmeler">
+        @if (!IsReadOnly)
+        {
+            <button class="dugme dugme--sade" @onclick="() => OnEdit.InvokeAsync()">Düzenle</button>
+            <button class="dugme dugme--sade" @onclick="() => OnDuplicate.InvokeAsync()">Çoğalt</button>
+            <button class="dugme dugme--sade dugme--tehlike" @onclick="() => OnDelete.InvokeAsync()">Sil</button>
+        }
+        else
+        {
+            <span style="color:var(--metin-3);font-size:12px;padding:6px">Bu takvim salt okunur</span>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Parameter, EditorRequired] public required EventOccurrence Occurrence { get; set; }
+
+    /// <summary>Kartın ekranda konumlanacağı yer; tıklanan etkinliğin dikdörtgeninden hesaplanır.</summary>
+    [Parameter] public string PositionStyle { get; set; } = "top:50%;left:50%;transform:translate(-50%,-50%)";
+
+    [Parameter] public EventCallback OnEdit { get; set; }
+    [Parameter] public EventCallback OnDuplicate { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string Color => State.ColorOf(Occurrence);
+
+    private string? CalendarName => State.CalendarOf(Occurrence.Source.CalendarId)?.Name;
+
+    private bool IsReadOnly => State.CalendarOf(Occurrence.Source.CalendarId)?.IsReadOnly ?? false;
+
+    private List<Category> Categories =>
+        [.. State.Categories.Where(c => Occurrence.Source.Categories.Any(ec => ec.CategoryId == c.Id))];
+
+    private List<Reminder> Reminders => [.. Occurrence.Source.Reminders.OrderByDescending(r => r.MinutesBefore)];
+
+    private string Description => Takvim.Core.Text.TurkishText.StripHtml(Occurrence.Source.DescriptionHtml).Trim();
+
+    private string RecurrenceText
+    {
+        get
+        {
+            // İstisna satırının kendi kuralı yoktur; kural seri kökündedir.
+            var rule = Occurrence.Source.RecurrenceRule;
+            return rule is null
+                ? "Tekrarlayan etkinlik"
+                : RecurrenceRuleBuilder.Describe(rule, Occurrence.StartLocal.Date);
+        }
+    }
+
+    private string AvailabilityText => Occurrence.Source.Availability switch
+    {
+        Availability.Free => "Müsait",
+        Availability.Tentative => "Belirsiz",
+        Availability.OutOfOffice => "Ofis dışı",
+        Availability.WorkingElsewhere => "Başka yerde çalışıyor",
+        Availability.FocusTime => "Odaklanma zamanı",
+        _ => "Meşgul",
+    };
+}

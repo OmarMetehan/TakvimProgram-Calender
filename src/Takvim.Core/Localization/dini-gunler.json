@@ -1,0 +1,26 @@
+{
+  "_aciklama": [
+    "Dini bayramların ilk günleri. Bu tarihler hicri takvime bağlı olduğu için",
+    "hesaplanmaz, tabloya yazılır: Diyanet'in ilan ettiği tarih ile hesaplanan",
+    "hicri takvim bazı yıllar bir gün ayrışır ve resmi tatil Diyanet'e göre işler.",
+    "",
+    "'dogrulandi: true' olan yıllar Diyanet takviminden teyit edilmiştir.",
+    "'dogrulandi: false' olan yıllar hesaplanmış tahmindir; arayüzde 'tahmini'",
+    "olarak işaretlenir. Diyanet ilan ettikçe bu dosya güncellenmelidir.",
+    "",
+    "Ramazan Bayramı 3 gün, Kurban Bayramı 4 gün sürer. Her ikisinin de bir",
+    "önceki günü arefedir ve yarım gün mesai uygulanır. Arefe günleri bu",
+    "tablodan türetilir, ayrıca yazılmaz."
+  ],
+  "yillar": [
+    { "yil": 2024, "ramazanBayrami": "2024-04-10", "kurbanBayrami": "2024-06-16", "dogrulandi": true },
+    { "yil": 2025, "ramazanBayrami": "2025-03-30", "kurbanBayrami": "2025-06-06", "dogrulandi": true },
+    { "yil": 2026, "ramazanBayrami": "2026-03-20", "kurbanBayrami": "2026-05-27", "dogrulandi": true },
+    { "yil": 2027, "ramazanBayrami": "2027-03-09", "kurbanBayrami": "2027-05-16", "dogrulandi": false },
+    { "yil": 2028, "ramazanBayrami": "2028-02-26", "kurbanBayrami": "2028-05-05", "dogrulandi": false },
+    { "yil": 2029, "ramazanBayrami": "2029-02-14", "kurbanBayrami": "2029-04-24", "dogrulandi": false },
+    { "yil": 2030, "ramazanBayrami": "2030-02-04", "kurbanBayrami": "2030-04-13", "dogrulandi": false },
+    { "yil": 2031, "ramazanBayrami": "2031-01-25", "kurbanBayrami": "2031-04-02", "dogrulandi": false },
+    { "yil": 2032, "ramazanBayrami": "2032-01-14", "kurbanBayrami": "2032-03-21", "dogrulandi": false }
+  ]
+}

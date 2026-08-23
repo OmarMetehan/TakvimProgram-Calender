@@ -1,0 +1,130 @@
+@* Çöp kutusu. Silinen etkinlikler 30 gün burada kalır. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel" role="dialog" aria-modal="true" aria-label="Çöp kutusu">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Çöp kutusu</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+        <p style="color:var(--metin-2);margin:0">
+            Silinen etkinlikler 30 gün boyunca burada kalır, sonra kalıcı olarak temizlenir.
+        </p>
+
+        @if (_loading)
+        {
+            <div class="bos-durum"><span>Yükleniyor…</span></div>
+        }
+        else if (_deleted.Count == 0)
+        {
+            <div class="bos-durum">
+                <div class="bos-durum__baslik">Çöp kutusu boş</div>
+            </div>
+        }
+        else
+        {
+            @foreach (var ev in _deleted)
+            {
+                <div style="display:flex;gap:10px;align-items:center;padding:9px;border:1px solid var(--cizgi);border-radius:var(--yuvarlak)"
+                     class="renk-@(ev.Color ?? ev.Calendar?.Color ?? "graphite")">
+                    <span class="renk-noktasi"></span>
+
+                    <div style="flex:1;min-width:0">
+                        <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @(string.IsNullOrWhiteSpace(ev.Title) ? "(başlıksız)" : ev.Title)
+                        </div>
+                        <div style="font-size:12px;color:var(--metin-2)">
+                            @TurkishFormat.DateTime(ev.StartLocal)
+                            @if (ev.RecurrenceRule is not null) { <span> · tekrarlayan seri</span> }
+                        </div>
+                        <div style="font-size:11px;color:var(--metin-3)">
+                            @RemainingText(ev)
+                        </div>
+                    </div>
+
+                    <button class="dugme" @onclick="() => Restore(ev.Id)">Geri al</button>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="panel__alt">
+        <button class="dugme dugme--tehlike" disabled="@(_deleted.Count == 0)" @onclick="PurgeExpired">
+            Süresi dolanları temizle
+        </button>
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+    [Inject] public required NodaTime.IClock Clock { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Geri alma sonrası ana görünümün tazelenmesi için.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<Event> _deleted = [];
+    private bool _loading = true;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var query = scope.ServiceProvider.GetRequiredService<CalendarQueryService>();
+        _deleted = await query.GetTrashAsync();
+
+        _loading = false;
+    }
+
+    private async Task Restore(Guid eventId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var events = scope.ServiceProvider.GetRequiredService<EventService>();
+            await events.RestoreAsync(eventId, CalendarBootstrapper.LocalUserId);
+        }
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+        State.ShowStatus("Etkinlik geri alındı.");
+    }
+
+    private async Task PurgeExpired()
+    {
+        int removed;
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var events = scope.ServiceProvider.GetRequiredService<EventService>();
+            removed = await events.PurgeTrashAsync();
+        }
+
+        await LoadAsync();
+        State.ShowStatus(removed == 0
+            ? "Süresi dolan kayıt yok."
+            : $"{removed} kayıt kalıcı olarak silindi.");
+    }
+
+    /// <summary>Kaydın kalıcı silinmesine kaç gün kaldığı.</summary>
+    private string RemainingText(Event ev)
+    {
+        if (ev.DeletedAt is not { } deletedAt) return string.Empty;
+
+        var elapsed = Clock.GetCurrentInstant() - NodaTime.Instant.FromDateTimeOffset(deletedAt);
+        var remaining = (int)Math.Ceiling((EventService.TrashRetention - elapsed).TotalDays);
+
+        return remaining <= 0
+            ? "Temizlenmeyi bekliyor"
+            : $"{remaining} gün sonra kalıcı olarak silinecek";
+    }
+}

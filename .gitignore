@@ -1,0 +1,23 @@
+# Derleme çıktıları
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+.vscode/
+
+# Veritabanı (yerel geliştirme)
+*.db
+*.db-shm
+*.db-wal
+
+# Ortam ve gizli bilgiler
+appsettings.Development.json
+appsettings.Local.json
+*.env

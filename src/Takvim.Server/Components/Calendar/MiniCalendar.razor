@@ -1,0 +1,81 @@
+@* Kenar çubuğundaki küçük ay takvimi. Tıklanan güne sıçrar. *@
+
+<div class="mini">
+    <div class="mini__ust">
+        <button class="dugme dugme--simge" title="Önceki ay" aria-label="Önceki ay"
+                @onclick="() => Shift(-1)">‹</button>
+        <span class="mini__ay">@TurkishFormat.MonthAndYear(_shown)</span>
+        <button class="dugme dugme--simge" title="Sonraki ay" aria-label="Sonraki ay"
+                @onclick="() => Shift(1)">›</button>
+    </div>
+
+    <div class="mini__izgara" role="grid" aria-label="@TurkishFormat.MonthAndYear(_shown)">
+        @foreach (var abbreviation in TurkishFormat.DayAbbreviations)
+        {
+            <div class="mini__gun-basligi" role="columnheader">@abbreviation[..1]</div>
+        }
+
+        @foreach (var day in Days())
+        {
+            var classes = new List<string> { "mini__gun" };
+            if (day.Month != _shown.Month) classes.Add("mini__gun--diger-ay");
+            if (day == Today) classes.Add("mini__gun--bugun");
+            else if (day == Selected) classes.Add("mini__gun--secili");
+            if (IsDayOff is not null && IsDayOff(day)) classes.Add("mini__gun--tatil");
+            if (HasEvents is not null && HasEvents(day)) classes.Add("mini__gun--dolu");
+
+            <button type="button"
+                    class="@string.Join(' ', classes)"
+                    role="gridcell"
+                    aria-label="@TurkishFormat.LongDateWithDay(day)"
+                    aria-selected="@(day == Selected ? "true" : "false")"
+                    @onclick="() => OnSelect.InvokeAsync(day)">@day.Day</button>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>Izgarada vurgulanan gün.</summary>
+    [Parameter, EditorRequired] public LocalDate Selected { get; set; }
+
+    [Parameter, EditorRequired] public LocalDate Today { get; set; }
+
+    [Parameter] public EventCallback<LocalDate> OnSelect { get; set; }
+
+    /// <summary>Günün resmi tatil olup olmadığını söyleyen yordam.</summary>
+    [Parameter] public Func<LocalDate, bool>? IsDayOff { get; set; }
+
+    /// <summary>Günde etkinlik olup olmadığını söyleyen yordam; nokta göstergesi için.</summary>
+    [Parameter] public Func<LocalDate, bool>? HasEvents { get; set; }
+
+    /// <summary>Mini takvimde gösterilen ay. Kullanıcı ok tuşlarıyla ana görünümden bağımsız gezebilir.</summary>
+    private LocalDate _shown;
+
+    private LocalDate _lastSelected;
+
+    protected override void OnParametersSet()
+    {
+        // Ana görünüm başka bir aya geçtiğinde mini takvim de oraya taşınır,
+        // ama kullanıcı mini takvimde kendi başına gezerken bu sıfırlanmaz.
+        if (Selected != _lastSelected)
+        {
+            _shown = Selected;
+            _lastSelected = Selected;
+        }
+    }
+
+    private void Shift(int months) => _shown = _shown.PlusMonths(months);
+
+    /// <summary>Tam haftalarla dolu ızgara: önceki ve sonraki ayın taşan günleri de çizilir.</summary>
+    private IEnumerable<LocalDate> Days()
+    {
+        var first = new LocalDate(_shown.Year, _shown.Month, 1);
+        var start = CalendarViewState.StartOfWeek(first);
+        var weeks = (Period.DaysBetween(start, first.PlusMonths(1).PlusDays(-1)) / 7) + 1;
+
+        for (var index = 0; index < weeks * 7; index++)
+        {
+            yield return start.PlusDays(index);
+        }
+    }
+}

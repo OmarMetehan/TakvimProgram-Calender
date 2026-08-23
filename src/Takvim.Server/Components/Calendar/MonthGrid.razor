@@ -1,0 +1,94 @@
+@* Ay görünümü. Her hücre bir gün; sığmayan etkinlikler "+N daha" ile toplanır. *@
+
+<div class="ay">
+
+    <div class="ay__gun-basliklari" style="grid-template-columns:@ColumnTemplate">
+        @foreach (var day in Days.Take(ColumnCount))
+        {
+            <div class="ay__gun-basligi">@TurkishFormat.DayAbbreviation(day)</div>
+        }
+    </div>
+
+    <div class="ay__izgara"
+         style="grid-template-columns:@ColumnTemplate;grid-template-rows:repeat(@WeekCount, minmax(0, 1fr))">
+
+        @foreach (var day in Days)
+        {
+            var events = State.On(day).OrderBy(o => o.IsAllDay ? 0 : 1).ThenBy(o => o.StartUtc).ToList();
+            var holidays = State.VisibleHolidays[day].ToList();
+            var shown = events.Take(MaxPerCell).ToList();
+            var hidden = events.Count - shown.Count;
+
+            <div class="@CellClass(day, holidays)" @onclick="() => CreateOn(day)">
+
+                <button type="button" class="ay__gun-no"
+                        title="@TurkishFormat.LongDateWithDay(day) — gün görünümüne geç"
+                        @onclick:stopPropagation="true"
+                        @onclick="() => OpenDay(day)">
+                    @(day.Day == 1 ? $"{day.Day} {TurkishFormat.MonthNames[day.Month - 1][..3]}" : day.Day.ToString())
+                </button>
+
+                @if (holidays.Count > 0)
+                {
+                    <div class="ay__tatil" title="@string.Join(", ", holidays.Select(h => h.Name))">
+                        @holidays[0].Name
+                    </div>
+                }
+
+                @foreach (var occurrence in shown)
+                {
+                    <EventChip Occurrence="occurrence"
+                               Variant="@(occurrence.IsAllDay ? EventChip.ChipVariant.Band : EventChip.ChipVariant.Row)"
+                               Color="@State.ColorOf(occurrence)"
+                               Continues="occurrence.IsAllDay && occurrence.StartLocal.Date < day"
+                               OnActivate="OnActivate" />
+                }
+
+                @if (hidden > 0)
+                {
+                    <button type="button" class="ay__daha"
+                            @onclick:stopPropagation="true"
+                            @onclick="() => OpenDay(day)">+@hidden daha</button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Parameter] public EventCallback<EventActivation> OnActivate { get; set; }
+
+    [Parameter] public EventCallback<(LocalDateTime Start, LocalDateTime End, bool AllDay)> OnCreateSlot { get; set; }
+
+    /// <summary>Bir hücrede en çok kaç etkinlik gösterileceği; kalanı "+N daha" olur.</summary>
+    private int MaxPerCell => State.View.Density == GridDensity.Compact ? 4 : 3;
+
+    private IReadOnlyList<LocalDate> Days => State.View.VisibleDays;
+
+    private int ColumnCount => State.View.HideWeekends ? 5 : 7;
+
+    private int WeekCount => Math.Max(1, Days.Count / ColumnCount);
+
+    private string ColumnTemplate => $"repeat({ColumnCount}, minmax(0, 1fr))";
+
+    private string CellClass(LocalDate day, List<Holiday> holidays)
+    {
+        var classes = new List<string> { "ay__hucre" };
+
+        if (day.Month != State.View.Anchor.Month) classes.Add("ay__hucre--diger-ay");
+        if (day == State.Today) classes.Add("ay__hucre--bugun");
+        if (CalendarViewState.IsWeekend(day)) classes.Add("ay__hucre--hafta-sonu");
+        if (holidays.Any(h => h.IsDayOff)) classes.Add("ay__hucre--tatil");
+
+        return string.Join(' ', classes);
+    }
+
+    private Task OpenDay(LocalDate day)
+        => State.SetViewAsync(State.View.WithKind(CalendarViewKind.Day).GoTo(day));
+
+    /// <summary>Ay görünümünde boş bir güne tıklamak varsayılan saatte etkinlik açar.</summary>
+    private Task CreateOn(LocalDate day)
+        => OnCreateSlot.InvokeAsync((day.At(new LocalTime(9, 0)), day.At(new LocalTime(10, 0)), false));
+}

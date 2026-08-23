@@ -1,0 +1,108 @@
+@* Kenar çubuğu: oluşturma düğmesi, mini takvim, takvim ve kategori süzgeçleri. *@
+
+<aside class="kenar" aria-label="Takvim kenar çubuğu">
+
+    <button class="olustur-dugmesi" @onclick="() => OnCreate.InvokeAsync()">
+        <span aria-hidden="true" style="font-size:19px;line-height:1">+</span>
+        Oluştur
+    </button>
+
+    <MiniCalendar Selected="State.View.Anchor"
+                  Today="State.Today"
+                  IsDayOff="State.IsDayOff"
+                  HasEvents="HasEvents"
+                  OnSelect="OnDateSelected" />
+
+    <section class="kenar__bolum">
+        <h2 class="kenar__baslik">Takvimlerim</h2>
+
+        @foreach (var calendar in State.Calendars)
+        {
+            var visible = !State.View.HiddenCalendarIds.Contains(calendar.Id);
+
+            <label class="liste-ogesi @(visible ? "" : "liste-ogesi--pasif") renk-@calendar.Color">
+                <input type="checkbox"
+                       class="onay-kutusu"
+                       checked="@visible"
+                       aria-label="@calendar.Name takvimini göster"
+                       @onchange="() => State.ToggleCalendarAsync(calendar.Id)" />
+                <span class="liste-ogesi__ad">@calendar.Name</span>
+                @if (calendar.IsReadOnly)
+                {
+                    <span class="rozet" title="Bu takvim salt okunur">Salt okunur</span>
+                }
+            </label>
+        }
+    </section>
+
+    <section class="kenar__bolum">
+        <h2 class="kenar__baslik">
+            Kategoriler
+            @if (State.View.CategoryFilter.Count > 0)
+            {
+                <button class="dugme dugme--sade" style="height:20px;font-size:11px;padding:0 6px"
+                        @onclick="ClearCategories">Temizle</button>
+            }
+        </h2>
+
+        @foreach (var category in State.Categories)
+        {
+            var selected = State.View.CategoryFilter.Contains(category.Id);
+
+            <button type="button"
+                    class="liste-ogesi @(selected ? "liste-ogesi--secili" : "") renk-@category.Color"
+                    aria-pressed="@(selected ? "true" : "false")"
+                    @onclick="() => State.ToggleCategoryAsync(category.Id)">
+                <span class="renk-noktasi"></span>
+                <span class="liste-ogesi__ad">@category.Name</span>
+                @if (category.IsPrivate)
+                {
+                    <span title="Paylaşımlarda gizlenir" aria-label="Gizli kategori">🔒</span>
+                }
+            </button>
+        }
+    </section>
+
+    <section class="kenar__bolum">
+        <h2 class="kenar__baslik">Araçlar</h2>
+
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenTrash.InvokeAsync()">
+            <span aria-hidden="true">🗑</span>
+            <span class="liste-ogesi__ad">Çöp kutusu</span>
+        </button>
+
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenImportExport.InvokeAsync()">
+            <span aria-hidden="true">⇅</span>
+            <span class="liste-ogesi__ad">İçe / dışa aktar</span>
+        </button>
+
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenShortcuts.InvokeAsync()">
+            <span aria-hidden="true">⌨</span>
+            <span class="liste-ogesi__ad">Klavye kısayolları</span>
+            <kbd>?</kbd>
+        </button>
+    </section>
+
+</aside>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Parameter] public EventCallback OnCreate { get; set; }
+    [Parameter] public EventCallback OnOpenTrash { get; set; }
+    [Parameter] public EventCallback OnOpenImportExport { get; set; }
+    [Parameter] public EventCallback OnOpenShortcuts { get; set; }
+
+    private Task OnDateSelected(LocalDate date)
+    {
+        // Mini takvimden gün seçmek görünümü değiştirmez, yalnızca oraya gider.
+        return State.GoToAsync(date);
+    }
+
+    /// <summary>Mini takvimde nokta göstergesi için: yüklü aralıkta o günde etkinlik var mı.</summary>
+    private bool HasEvents(LocalDate date)
+        => State.View.Contains(date) && State.On(date).Any();
+
+    private Task ClearCategories()
+        => State.SetViewAsync(State.View with { CategoryFilter = [] });
+}

@@ -1,0 +1,315 @@
+@* Gün / hafta / iş haftası / N gün ızgarası.
+   İki çizim kipi vardır: takvimler üst üste (tek sütun) ya da yan yana
+   (her takvim kendi sütununda). Kip, sütun listesini değiştirmekten ibarettir. *@
+@implements IDisposable
+
+<div class="izgara">
+
+    @* Gün başlıkları *@
+    <div class="izgara__ust" style="grid-template-columns:@ColumnTemplate">
+        <div class="izgara__kose">@ZoneAbbreviation</div>
+
+        @foreach (var day in Days)
+        {
+            var holidays = State.VisibleHolidays[day].ToList();
+            var classes = new List<string> { "gun-basligi" };
+            if (day == State.Today) classes.Add("gun-basligi--bugun");
+            if (CalendarViewState.IsWeekend(day)) classes.Add("gun-basligi--hafta-sonu");
+            if (holidays.Any(h => h.IsDayOff)) classes.Add("gun-basligi--tatil");
+
+            <div class="@string.Join(' ', classes)" style="grid-column:span @CalendarsPerDay">
+                <div class="gun-basligi__ad">@TurkishFormat.DayAbbreviation(day)</div>
+                <button type="button" class="gun-basligi__sayi"
+                        title="@TurkishFormat.LongDateWithDay(day) — gün görünümüne geç"
+                        @onclick="() => OpenDay(day)">@day.Day</button>
+
+                @if (holidays.Count > 0)
+                {
+                    <div class="gun-basligi__tatil" title="@string.Join(", ", holidays.Select(h => h.Name))">
+                        @holidays[0].Name@(holidays[0].IsEstimated ? " (tahmini)" : "")
+                    </div>
+                }
+
+                @if (SplitByCalendar)
+                {
+                    <div style="display:grid;grid-template-columns:repeat(@CalendarsPerDay, minmax(0,1fr));gap:1px;margin-top:3px">
+                        @foreach (var calendar in SplitCalendars)
+                        {
+                            <div class="renk-@calendar.Color"
+                                 style="font-size:10px;color:var(--metin-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-top:2px solid var(--olay-renk);padding-top:2px"
+                                 title="@calendar.Name">@calendar.Name</div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @* Tüm gün ve çok günlü etkinlikler *@
+    <div class="tum-gun" style="grid-template-columns:@ColumnTemplate">
+        <div class="tum-gun__etiket">Tüm gün</div>
+
+        @foreach (var column in Columns)
+        {
+            <div class="tum-gun__hucre @(CalendarViewState.IsWeekend(column.Day) ? "tum-gun__hucre--hafta-sonu" : "")"
+                 @onclick="() => CreateAllDay(column)">
+                @foreach (var occurrence in AllDayIn(column))
+                {
+                    @* Çok günlü etkinlik yalnızca başladığı günde tam yazılır. *@
+                    <EventChip Occurrence="occurrence"
+                               Variant="EventChip.ChipVariant.Band"
+                               Color="@State.ColorOf(occurrence)"
+                               ShowTime="false"
+                               Continues="occurrence.StartLocal.Date < column.Day"
+                               OnActivate="OnActivate" />
+                }
+            </div>
+        }
+    </div>
+
+    @* Kaydırılan saat ızgarası *@
+    <div class="izgara__govde" id="izgara-govde">
+        <div class="izgara__ic" style="grid-template-columns:@ColumnTemplate">
+
+            <div class="saat-sutunu">
+                @for (var hour = 0; hour < 24; hour++)
+                {
+                    <div class="saat-etiketi"><span>@($"{hour:00}:00")</span></div>
+                }
+            </div>
+
+            @foreach (var column in Columns)
+            {
+                var day = column.Day;
+                var classes = new List<string> { "gun-sutunu" };
+                if (CalendarViewState.IsWeekend(day)) classes.Add("gun-sutunu--hafta-sonu");
+                if (State.IsDayOff(day)) classes.Add("gun-sutunu--tatil");
+
+                <div class="@string.Join(' ', classes)"
+                     @onclick="e => CreateAt(column, e)"
+                     @ondragover:preventDefault="true"
+                     @ondrop="e => Drop(column, e)">
+
+                    @* Mesai dışı saatler soluk gösterilir. *@
+                    <div class="mesai-disi" style="top:0;height:@(Percent(WorkStart.Hour / 24.0))"></div>
+                    <div class="mesai-disi" style="top:@(Percent(WorkEndOf(day) / 24.0));bottom:0"></div>
+
+                    @for (var hour = 0; hour < 24; hour++)
+                    {
+                        <div class="saat-cizgisi"></div>
+                    }
+
+                    @if (day == State.Today)
+                    {
+                        <div class="simdi-cizgisi" style="top:@(Percent(NowRatio))"
+                             aria-label="Şu an @TurkishFormat.Time(State.Now)"></div>
+                    }
+
+                    @foreach (var placed in Layout(column))
+                    {
+                        <EventChip Occurrence="placed.Occurrence"
+                                   Variant="EventChip.ChipVariant.Block"
+                                   Color="@State.ColorOf(placed.Occurrence)"
+                                   Style="@BlockStyle(placed)"
+                                   Compact="placed.Height < 0.035"
+                                   Draggable="true"
+                                   OnActivate="OnActivate"
+                                   OnDragStarted="() => _dragging = placed.Occurrence"
+                                   OnResizeStarted="() => _resizing = placed.Occurrence" />
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IJSRuntime Js { get; set; }
+
+    /// <summary>Etkinliğe tıklanınca önizleme kartını açar.</summary>
+    [Parameter] public EventCallback<EventActivation> OnActivate { get; set; }
+
+    /// <summary>Boş bir alana tıklanınca hızlı oluşturmayı açar.</summary>
+    [Parameter] public EventCallback<(LocalDateTime Start, LocalDateTime End, bool AllDay)> OnCreateSlot { get; set; }
+
+    [Parameter] public EventCallback<(EventOccurrence Occurrence, LocalDateTime NewStart)> OnMove { get; set; }
+
+    [Parameter] public EventCallback<(EventOccurrence Occurrence, LocalDateTime NewEnd)> OnResize { get; set; }
+
+    /// <summary>Izgaradaki tek bir sütun: bir gün ve (yan yana kipte) bir takvim.</summary>
+    private readonly record struct GridColumn(LocalDate Day, Guid? CalendarId);
+
+    /// <summary>Mesai saatleri. Faz 2'de gün bazında ayarlanabilir olacak.</summary>
+    private static readonly LocalTime WorkStart = new(9, 0);
+    private static readonly LocalTime WorkEnd = new(18, 0);
+
+    /// <summary>Izgarada tıklamaların yuvarlanacağı dilim.</summary>
+    private const int SlotMinutes = 15;
+
+    private EventOccurrence? _dragging;
+    private EventOccurrence? _resizing;
+    private System.Threading.Timer? _nowTimer;
+
+    private IReadOnlyList<LocalDate> Days => State.View.VisibleDays;
+
+    /// <summary>Yan yana kipte, görünür takvimler ayrı sütunlara ayrılır.</summary>
+    private List<Calendar> SplitCalendars => [.. State.VisibleCalendars];
+
+    private bool SplitByCalendar
+        => State.View.DisplayMode == CalendarDisplayMode.Columns && SplitCalendars.Count > 1;
+
+    private int CalendarsPerDay => SplitByCalendar ? SplitCalendars.Count : 1;
+
+    private IEnumerable<GridColumn> Columns
+    {
+        get
+        {
+            foreach (var day in Days)
+            {
+                if (!SplitByCalendar)
+                {
+                    yield return new GridColumn(day, null);
+                    continue;
+                }
+
+                foreach (var calendar in SplitCalendars)
+                {
+                    yield return new GridColumn(day, calendar.Id);
+                }
+            }
+        }
+    }
+
+    private string ColumnTemplate
+        => $"var(--saat-sutunu) repeat({Days.Count * CalendarsPerDay}, minmax(0, 1fr))";
+
+    /// <summary>Kullanıcının zaman diliminin kısaltması; ızgaranın sol üst köşesinde gösterilir.</summary>
+    private string ZoneAbbreviation
+    {
+        get
+        {
+            var city = State.ZoneId.Split('/').Last();
+            return city.Length <= 3 ? city : city[..3];
+        }
+    }
+
+    private double NowRatio
+    {
+        get
+        {
+            var now = State.Now.TimeOfDay;
+            return (now.Hour * 60 + now.Minute) / (24.0 * 60);
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        // Geçerli saat çizgisi dakikada bir tazelenir.
+        _nowTimer = new System.Threading.Timer(
+            _ => InvokeAsync(StateHasChanged), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await Js.InvokeVoidAsync("takvim.measureScrollbar", "izgara-govde");
+        // Açılışta mesai saatleri görünsün diye geçerli saate kaydırılır.
+        await Js.InvokeVoidAsync("takvim.scrollToRatio", "izgara-govde", NowRatio);
+    }
+
+    /// <summary>Arefe günlerinde mesai 13:00'te biter; soluk alan buna göre çizilir.</summary>
+    private double WorkEndOf(LocalDate day)
+    {
+        var end = State.VisibleHolidays[day]
+            .FirstOrDefault(h => h.Kind == HolidayKind.HalfDayEve)?.WorkEndsAt ?? WorkEnd;
+        return end.Hour + end.Minute / 60.0;
+    }
+
+    private IEnumerable<EventOccurrence> TimedIn(GridColumn column)
+    {
+        var occurrences = State.TimedOn(column.Day);
+        return column.CalendarId is { } id
+            ? occurrences.Where(o => o.Source.CalendarId == id)
+            : occurrences;
+    }
+
+    private IEnumerable<EventOccurrence> AllDayIn(GridColumn column)
+    {
+        var occurrences = State.AllDayOn(column.Day).OrderBy(o => o.StartUtc);
+        return column.CalendarId is { } id
+            ? occurrences.Where(o => o.Source.CalendarId == id)
+            : occurrences;
+    }
+
+    private List<PlacedOccurrence> Layout(GridColumn column)
+        => TimeGridLayout.Place(TimedIn(column), column.Day.AtMidnight(), column.Day.PlusDays(1).AtMidnight());
+
+    private static string Percent(double ratio)
+        => (ratio * 100).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private static string BlockStyle(PlacedOccurrence placed)
+        => $"top:{Percent(placed.Top)};height:{Percent(placed.Height)};" +
+           $"left:calc({Percent(placed.Left)} + 1px);width:calc({Percent(placed.Width)} - 3px);" +
+           $"z-index:{placed.ZIndex}";
+
+    // ------------------------------------------------------------------
+    // Etkileşim
+    // ------------------------------------------------------------------
+
+    private Task OpenDay(LocalDate day)
+        => State.SetViewAsync(State.View.WithKind(CalendarViewKind.Day).GoTo(day));
+
+    /// <summary>Sütuna tıklanan dikey konumu saate çevirir.</summary>
+    private static LocalTime TimeFromOffset(double offsetY, double columnHeight)
+    {
+        var ratio = Math.Clamp(offsetY / Math.Max(columnHeight, 1), 0, 0.9999);
+        var minutes = (int)(ratio * 24 * 60);
+        var snapped = minutes / SlotMinutes * SlotMinutes;
+        return new LocalTime(snapped / 60, snapped % 60);
+    }
+
+    /// <summary>
+    /// Saat satırının piksel yüksekliği. Yoğunluk ayarına bağlıdır; CSS'teki
+    /// --saat-yuksekligi değeriyle aynı tutulmalıdır.
+    /// </summary>
+    private double SlotHeightPixels()
+        => State.View.Density == GridDensity.Compact ? 36 : 52;
+
+    private async Task CreateAt(GridColumn column, MouseEventArgs e)
+    {
+        var start = column.Day + TimeFromOffset(e.OffsetY, 24 * SlotHeightPixels());
+        await OnCreateSlot.InvokeAsync((start, start.PlusMinutes(60), false));
+    }
+
+    private Task CreateAllDay(GridColumn column)
+        => OnCreateSlot.InvokeAsync((column.Day.AtMidnight(), column.Day.PlusDays(1).AtMidnight(), true));
+
+    private async Task Drop(GridColumn column, DragEventArgs e)
+    {
+        var height = 24 * SlotHeightPixels();
+
+        if (_resizing is { } resizing)
+        {
+            var end = column.Day + TimeFromOffset(e.OffsetY, height);
+            _resizing = null;
+
+            // Bitiş başlangıcın önüne düşemez; en az bir dilim bırakılır.
+            if (end <= resizing.StartLocal) end = resizing.StartLocal.PlusMinutes(SlotMinutes);
+            await OnResize.InvokeAsync((resizing, end));
+            return;
+        }
+
+        if (_dragging is not { } dragging) return;
+        _dragging = null;
+
+        var start = column.Day + TimeFromOffset(e.OffsetY, height);
+        if (start == dragging.StartLocal) return;
+
+        await OnMove.InvokeAsync((dragging, start));
+    }
+
+    public void Dispose() => _nowTimer?.Dispose();
+}

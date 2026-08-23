@@ -1,0 +1,90 @@
+@* Zamanlama görünümü: kronolojik akış. Boş günler atlanır. *@
+
+<div class="zamanlama">
+    @if (_days.Count == 0)
+    {
+        <div class="bos-durum">
+            <div class="bos-durum__baslik">Bu aralıkta etkinlik yok</div>
+            <p>Yeni bir etkinlik oluşturmak için <kbd>C</kbd> tuşuna basın.</p>
+        </div>
+    }
+
+    @foreach (var (date, occurrences) in _days)
+    {
+        <div class="zamanlama__gun @(date == State.Today ? "zamanlama__gun--bugun" : "")">
+
+            <div class="zamanlama__tarih">
+                <strong>@date.Day @TurkishFormat.MonthNames[date.Month - 1]</strong>
+                @TurkishFormat.DayName(date)
+                @foreach (var holiday in State.VisibleHolidays[date])
+                {
+                    <div style="color:var(--tehlike);font-size:12px">@holiday.Name</div>
+                }
+            </div>
+
+            <div class="zamanlama__olaylar">
+                @foreach (var occurrence in occurrences)
+                {
+                    <button type="button" class="zamanlama__olay renk-@State.ColorOf(occurrence)"
+                            @onclick="e => Activate(occurrence)">
+                        <span class="zamanlama__olay-saat">
+                            @TurkishFormat.OccurrenceTime(occurrence.StartLocal, occurrence.EndLocal, occurrence.IsAllDay)
+                        </span>
+                        <span class="renk-noktasi"></span>
+                        <span>
+                            <span class="zamanlama__olay-baslik">
+                                @(string.IsNullOrWhiteSpace(occurrence.Source.Title) ? "(başlıksız)" : occurrence.Source.Title)
+                            </span>
+                            @if (!string.IsNullOrWhiteSpace(occurrence.Source.LocationText))
+                            {
+                                <span class="zamanlama__olay-konum"> · @occurrence.Source.LocationText</span>
+                            }
+                        </span>
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Parameter] public EventCallback<EventActivation> OnActivate { get; set; }
+
+    private List<(LocalDate Date, List<EventOccurrence> Occurrences)> _days = [];
+
+    protected override void OnParametersSet()
+    {
+        // Çok günlü etkinlikler dokundukları her günde listelenir; kullanıcı
+        // 3 günlük bir seyahati üç günün de altında görmek ister.
+        _days = State.Occurrences
+            .SelectMany(o => SpannedDays(o).Select(day => (Day: day, Occurrence: o)))
+            .Where(x => State.View.Contains(x.Day))
+            .GroupBy(x => x.Day)
+            .OrderBy(g => g.Key)
+            .Select(g => (g.Key, g
+                .Select(x => x.Occurrence)
+                .OrderBy(o => o.IsAllDay ? 0 : 1)
+                .ThenBy(o => o.StartUtc)
+                .ToList()))
+            .ToList();
+    }
+
+    private static IEnumerable<LocalDate> SpannedDays(EventOccurrence occurrence)
+    {
+        var last = occurrence.IsAllDay || occurrence.EndLocal.TimeOfDay == LocalTime.Midnight
+            ? occurrence.EndLocal.Date.PlusDays(-1)
+            : occurrence.EndLocal.Date;
+
+        if (last < occurrence.StartLocal.Date) last = occurrence.StartLocal.Date;
+
+        for (var day = occurrence.StartLocal.Date; day <= last; day = day.PlusDays(1))
+        {
+            yield return day;
+        }
+    }
+
+    private Task Activate(EventOccurrence occurrence)
+        => OnActivate.InvokeAsync(new EventActivation(occurrence, default));
+}

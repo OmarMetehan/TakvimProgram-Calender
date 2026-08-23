@@ -1,0 +1,54 @@
+@* Alt ortadaki bildirim şeridi. Yıkıcı işlemlerden sonra geri alma sunar. *@
+@implements IDisposable
+
+@if (State.PendingUndo is { } undo)
+{
+    <div class="bildirim" role="status" aria-live="polite">
+        <span class="bildirim__metin">@undo.Message</span>
+        <button class="bildirim__eylem" @onclick="() => State.UndoAsync()">Geri al</button>
+        <button class="dugme dugme--simge" style="color:inherit" aria-label="Kapat"
+                @onclick="() => State.DismissNotifications()">✕</button>
+    </div>
+}
+else if (State.StatusMessage is { } message)
+{
+    <div class="bildirim" role="status" aria-live="polite">
+        <span class="bildirim__metin">@message</span>
+        <button class="dugme dugme--simge" style="color:inherit" aria-label="Kapat"
+                @onclick="() => State.DismissNotifications()">✕</button>
+    </div>
+}
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    /// <summary>Şeridin kendiliğinden kapanma süresi.</summary>
+    private static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(9);
+
+    private System.Threading.Timer? _timer;
+    private object? _shownNotification;
+
+    protected override void OnParametersSet()
+    {
+        var current = (object?)State.PendingUndo ?? State.StatusMessage;
+        if (ReferenceEquals(current, _shownNotification)) return;
+
+        _shownNotification = current;
+        _timer?.Dispose();
+        _timer = null;
+
+        if (current is null) return;
+
+        // Yeni bir bildirim geldiğinde sayaç baştan başlar.
+        _timer = new System.Threading.Timer(_ => InvokeAsync(() =>
+        {
+            // Sayaç dolarken başka bir bildirim geldiyse bunu kapatmayız.
+            if (ReferenceEquals((object?)State.PendingUndo ?? State.StatusMessage, _shownNotification))
+            {
+                State.DismissNotifications();
+            }
+        }), null, Lifetime, Timeout.InfiniteTimeSpan);
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

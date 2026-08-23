@@ -1,0 +1,364 @@
+@* Etkinlik düzenleme paneli. Yeni ve var olan etkinlikler için aynı form. *@
+
+<div class="perde" @onclick="() => OnCancel.InvokeAsync()"></div>
+
+<div class="panel" role="dialog" aria-modal="true" aria-label="@(Draft.IsNew ? "Yeni etkinlik" : "Etkinliği düzenle")">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">@(Draft.IsNew ? "Yeni etkinlik" : "Etkinliği düzenle")</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnCancel.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        @if (_problems.Count > 0)
+        {
+            <div role="alert" style="border:1px solid var(--tehlike);border-radius:var(--yuvarlak);padding:9px 11px;color:var(--tehlike)">
+                @foreach (var problem in _problems)
+                {
+                    <div>@problem</div>
+                }
+            </div>
+        }
+
+        <div>
+            <label class="etiket" for="olay-baslik">Başlık</label>
+            <input id="olay-baslik" class="alan" placeholder="Etkinlik başlığı"
+                   @bind="Draft.Title" @bind:event="oninput" />
+        </div>
+
+        <div>
+            <label class="etiket" for="olay-takvim">Takvim</label>
+            <select id="olay-takvim" class="alan" @bind="Draft.CalendarId">
+                @foreach (var calendar in State.Calendars.Where(c => !c.IsReadOnly))
+                {
+                    <option value="@calendar.Id">@calendar.Name</option>
+                }
+            </select>
+        </div>
+
+        @* ---------- Zaman ---------- *@
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+            <label class="liste-ogesi" style="padding-left:0">
+                <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                       checked="@Draft.IsAllDay" @onchange="ToggleAllDay" />
+                <span class="liste-ogesi__ad">Tüm gün</span>
+            </label>
+
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
+                <div>
+                    <label class="etiket" for="olay-bas-tarih">Başlangıç</label>
+                    <input id="olay-bas-tarih" class="alan" type="date"
+                           value="@Draft.StartDate" @onchange="OnStartDateChanged" />
+                </div>
+                @if (!Draft.IsAllDay)
+                {
+                    <div>
+                        <label class="etiket" for="olay-bas-saat">Saat</label>
+                        <input id="olay-bas-saat" class="alan" type="time" style="width:118px"
+                               value="@Draft.StartTime" @onchange="OnStartTimeChanged" />
+                    </div>
+                }
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
+                <div>
+                    <label class="etiket" for="olay-bit-tarih">@(Draft.IsAllDay ? "Son gün" : "Bitiş")</label>
+                    <input id="olay-bit-tarih" class="alan" type="date"
+                           value="@Draft.EndDate"
+                           @onchange="e => Draft.EndDate = e.Value?.ToString() ?? Draft.EndDate" />
+                </div>
+                @if (!Draft.IsAllDay)
+                {
+                    <div>
+                        <label class="etiket" for="olay-bit-saat">Saat</label>
+                        <input id="olay-bit-saat" class="alan" type="time" style="width:118px"
+                               value="@Draft.EndTime"
+                               @onchange="e => Draft.EndTime = e.Value?.ToString() ?? Draft.EndTime" />
+                    </div>
+                }
+            </div>
+
+            @if (!Draft.IsAllDay)
+            {
+                <details>
+                    <summary style="cursor:pointer;font-size:13px;color:var(--metin-2)">Zaman dilimi</summary>
+                    <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px">
+                        <select class="alan" @bind="Draft.StartTimeZoneId" aria-label="Başlangıç zaman dilimi">
+                            @foreach (var zone in CommonZones)
+                            {
+                                <option value="@zone">@zone</option>
+                            }
+                        </select>
+
+                        <label class="liste-ogesi" style="padding-left:0">
+                            <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                                   checked="@Draft.SplitTimeZones"
+                                   @onchange="e => Draft.SplitTimeZones = (bool)(e.Value ?? false)" />
+                            <span class="liste-ogesi__ad">Bitiş farklı bir dilimde</span>
+                        </label>
+
+                        @if (Draft.SplitTimeZones)
+                        {
+                            <select class="alan" @bind="Draft.EndTimeZoneId" aria-label="Bitiş zaman dilimi">
+                                @foreach (var zone in CommonZones)
+                                {
+                                    <option value="@zone">@zone</option>
+                                }
+                            </select>
+                        }
+                    </div>
+                </details>
+            }
+        </div>
+
+        @* ---------- Tekrar ---------- *@
+
+        <div>
+            <label class="etiket" for="olay-tekrar">Tekrar</label>
+            <select id="olay-tekrar" class="alan" @bind="Draft.RecurrencePreset">
+                <option value="@RecurrencePreset.None">Tekrarlamaz</option>
+                <option value="@RecurrencePreset.Daily">Her gün</option>
+                <option value="@RecurrencePreset.WeeklyOnStartDay">Her hafta @TurkishFormat.DayName(Draft.Start.Date).ToLower(TurkishFormat.Culture)</option>
+                <option value="@RecurrencePreset.EveryWeekday">Hafta içi her gün</option>
+                <option value="@RecurrencePreset.MonthlyOnDayOfMonth">Her ay ayın @Draft.Start.Day'inde</option>
+                <option value="@RecurrencePreset.MonthlyOnNthWeekday">Her ay aynı sıradaki gün</option>
+                <option value="@RecurrencePreset.Yearly">Her yıl</option>
+                <option value="@RecurrencePreset.Custom">Özel kural…</option>
+            </select>
+
+            @if (Draft.RecurrencePreset == RecurrencePreset.Custom)
+            {
+                <input class="alan" style="margin-top:6px;font-family:ui-monospace,monospace;font-size:12px"
+                       placeholder="FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE"
+                       @bind="Draft.CustomRecurrenceRule" @bind:event="oninput" />
+            }
+
+            @if (Draft.RecurrencePreset != RecurrencePreset.None)
+            {
+                <div style="font-size:12px;color:var(--metin-2);margin-top:5px">@Draft.RecurrenceDescription</div>
+            }
+        </div>
+
+        @* ---------- Konum ---------- *@
+
+        <div>
+            <label class="etiket" for="olay-konum">Konum</label>
+            <input id="olay-konum" class="alan" placeholder="Oda, adres veya serbest metin"
+                   @bind="Draft.LocationText" @bind:event="oninput" />
+        </div>
+
+        <div>
+            <label class="etiket" for="olay-baglanti">Çevrimiçi toplantı</label>
+            <div style="display:flex;gap:6px">
+                <input id="olay-baglanti" class="alan" placeholder="https://…"
+                       @bind="Draft.OnlineMeetingUrl" @bind:event="oninput" />
+                <select class="alan" style="width:112px" @bind="Draft.OnlineMeetingProvider"
+                        aria-label="Toplantı sağlayıcısı">
+                    <option value="">Sağlayıcı</option>
+                    <option value="teams">Teams</option>
+                    <option value="meet">Meet</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="webex">Webex</option>
+                    <option value="diger">Diğer</option>
+                </select>
+            </div>
+        </div>
+
+        @* ---------- Renk ve kategoriler ---------- *@
+
+        <div>
+            <span class="etiket">Renk</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button type="button" class="renk-noktasi"
+                        style="width:24px;height:24px;border-radius:50%;border:2px solid @(Draft.Color is null ? "var(--birincil)" : "transparent");--olay-renk:var(--metin-3)"
+                        title="Takvimin rengi" aria-label="Takvimin rengini kullan"
+                        @onclick="() => Draft.Color = null"></button>
+
+                @foreach (var color in Palette)
+                {
+                    <button type="button" class="renk-noktasi renk-@color"
+                            style="width:24px;height:24px;border-radius:50%;border:2px solid @(Draft.Color == color ? "var(--metin)" : "transparent")"
+                            title="@color" aria-label="@color rengi"
+                            @onclick="() => Draft.Color = color"></button>
+                }
+            </div>
+        </div>
+
+        <div>
+            <span class="etiket">Kategoriler</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                @foreach (var category in State.Categories)
+                {
+                    var selected = Draft.CategoryIds.Contains(category.Id);
+
+                    <button type="button" class="rozet renk-@category.Color"
+                            style="border:1px solid @(selected ? "var(--olay-renk)" : "var(--cizgi)");@(selected ? "background:color-mix(in srgb, var(--olay-renk) 16%, transparent)" : "")"
+                            aria-pressed="@(selected ? "true" : "false")"
+                            @onclick="() => ToggleCategory(category.Id)">
+                        <span class="renk-noktasi" style="width:8px;height:8px;border-radius:50%"></span>
+                        @category.Name
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* ---------- Durum ---------- *@
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+                <label class="etiket" for="olay-durum">Meşguliyet</label>
+                <select id="olay-durum" class="alan" @bind="Draft.Availability">
+                    <option value="@Availability.Busy">Meşgul</option>
+                    <option value="@Availability.Free">Müsait</option>
+                    <option value="@Availability.Tentative">Belirsiz</option>
+                    <option value="@Availability.OutOfOffice">Ofis dışı</option>
+                    <option value="@Availability.WorkingElsewhere">Başka yerde çalışıyor</option>
+                    <option value="@Availability.FocusTime">Odaklanma zamanı</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="etiket" for="olay-gorunurluk">Görünürlük</label>
+                <select id="olay-gorunurluk" class="alan" @bind="Draft.Visibility">
+                    <option value="@EventVisibility.Default">Varsayılan</option>
+                    <option value="@EventVisibility.Public">Herkese açık</option>
+                    <option value="@EventVisibility.Private">Özel</option>
+                </select>
+            </div>
+        </div>
+
+        @if (HasPrivateCategory && Draft.Visibility == EventVisibility.Public)
+        {
+            <div role="status" style="font-size:12px;color:var(--uyari)">
+                Bu etkinlik gizli bir kategoride. Gizlilik, "herkese açık" seçimini geçersiz kılar
+                ve paylaşımlarda yalnızca "meşgul" görünür.
+            </div>
+        }
+
+        @* ---------- Hatırlatıcılar ---------- *@
+
+        <div>
+            <span class="etiket">Hatırlatıcılar</span>
+
+            @foreach (var (reminder, index) in Draft.Reminders.Select((r, i) => (r, i)))
+            {
+                <div style="display:flex;gap:6px;margin-bottom:5px;align-items:center">
+                    <select class="alan" style="flex:1" aria-label="Hatırlatma zamanı"
+                            value="@reminder.MinutesBefore"
+                            @onchange="e => SetReminderMinutes(index, e)">
+                        @foreach (var minutes in ReminderChoices)
+                        {
+                            <option value="@minutes">@TurkishFormat.ReminderOffset(minutes)</option>
+                        }
+                    </select>
+                    <button class="dugme dugme--simge" aria-label="Hatırlatıcıyı kaldır" title="Kaldır"
+                            @onclick="() => Draft.Reminders.RemoveAt(index)">✕</button>
+                </div>
+            }
+
+            <button class="dugme dugme--sade" @onclick="AddReminder">+ Hatırlatıcı ekle</button>
+        </div>
+
+        @* ---------- Açıklama ---------- *@
+
+        <div>
+            <label class="etiket" for="olay-aciklama">Açıklama</label>
+            <textarea id="olay-aciklama" class="alan" rows="4" placeholder="Notlar, gündem, bağlantılar"
+                      @bind="Draft.DescriptionHtml" @bind:event="oninput"></textarea>
+        </div>
+
+    </div>
+
+    <div class="panel__alt">
+        @if (!Draft.IsNew)
+        {
+            <button class="dugme dugme--tehlike" @onclick="() => OnDelete.InvokeAsync()">Sil</button>
+        }
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnCancel.InvokeAsync()">Vazgeç</button>
+        <button class="dugme dugme--birincil" @onclick="Save">Kaydet</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Parameter, EditorRequired] public required EventDraft Draft { get; set; }
+
+    [Parameter] public EventCallback<EventDraft> OnSave { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private List<string> _problems = [];
+
+    private static readonly string[] Palette =
+        ["tomato", "flamingo", "tangerine", "banana", "sage", "basil",
+         "peacock", "blueberry", "lavender", "grape", "graphite"];
+
+    private static readonly int[] ReminderChoices =
+        [0, 5, 10, 15, 30, 60, 120, 24 * 60, 2 * 24 * 60, 7 * 24 * 60];
+
+    /// <summary>Zaman dilimi listesi kısa tutulur; tam liste yüzlerce satırdır.</summary>
+    private static readonly string[] CommonZones =
+    [
+        "Europe/Istanbul", "Europe/London", "Europe/Berlin", "Europe/Paris", "Europe/Moscow",
+        "America/New_York", "America/Chicago", "America/Los_Angeles", "America/Sao_Paulo",
+        "Asia/Dubai", "Asia/Tokyo", "Asia/Shanghai", "Asia/Kolkata", "Australia/Sydney", "UTC",
+    ];
+
+    private bool HasPrivateCategory
+        => State.Categories.Any(c => c.IsPrivate && Draft.CategoryIds.Contains(c.Id));
+
+    private void ToggleAllDay(ChangeEventArgs e)
+    {
+        Draft.IsAllDay = (bool)(e.Value ?? false);
+        Draft.OnAllDayChanged();
+    }
+
+    /// <summary>Başlangıç günü değişince bitiş aynı süreyi koruyarak kayar.</summary>
+    private void OnStartDateChanged(ChangeEventArgs e)
+    {
+        var previous = Draft.Start;
+        Draft.StartDate = e.Value?.ToString() ?? Draft.StartDate;
+        Draft.ShiftEndWithStart(previous);
+    }
+
+    private void OnStartTimeChanged(ChangeEventArgs e)
+    {
+        var previous = Draft.Start;
+        Draft.StartTime = e.Value?.ToString() ?? Draft.StartTime;
+        Draft.ShiftEndWithStart(previous);
+    }
+
+    private void ToggleCategory(Guid id)
+    {
+        if (!Draft.CategoryIds.Remove(id)) Draft.CategoryIds.Add(id);
+    }
+
+    private void AddReminder()
+    {
+        // Zaten var olan bir süreyi ikinci kez eklemek anlamsız; ilk boş seçenek alınır.
+        var used = Draft.Reminders.Select(r => r.MinutesBefore).ToHashSet();
+        var next = ReminderChoices.FirstOrDefault(m => !used.Contains(m), 30);
+
+        Draft.Reminders.Add(new ReminderInput(next));
+    }
+
+    private void SetReminderMinutes(int index, ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var minutes)) return;
+
+        Draft.Reminders[index] = Draft.Reminders[index] with { MinutesBefore = minutes };
+    }
+
+    private async Task Save()
+    {
+        _problems = [.. Draft.Validate()];
+        if (_problems.Count > 0) return;
+
+        await OnSave.InvokeAsync(Draft);
+    }
+}

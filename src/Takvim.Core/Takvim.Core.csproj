@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
+    <PackageReference Include="NodaTime" Version="3.3.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Dini gün tablosu derlemeye gömülür; dosya kaybolsa da uygulama çalışır. -->
+    <EmbeddedResource Include="Localization\dini-gunler.json" />
+  </ItemGroup>
+
+</Project>

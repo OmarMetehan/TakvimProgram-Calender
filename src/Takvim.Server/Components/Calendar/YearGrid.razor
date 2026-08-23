@@ -1,0 +1,112 @@
+@* Yıl görünümü. On iki küçük ay; gün zeminleri o günün doluluğuna göre koyulaşır. *@
+
+<div class="yil">
+    @for (var month = 1; month <= 12; month++)
+    {
+        var current = month;
+
+        <section class="yil__ay">
+            <button type="button" class="yil__ay-adi"
+                    style="width:100%"
+                    @onclick="() => OpenMonth(current)">
+                @TurkishFormat.MonthNames[current - 1]
+            </button>
+
+            <div class="yil__izgara" role="grid">
+                @foreach (var abbreviation in TurkishFormat.DayAbbreviations)
+                {
+                    <div class="yil__gun-basligi" role="columnheader">@abbreviation[..1]</div>
+                }
+
+                @foreach (var day in MonthDays(current))
+                {
+                    if (day is not { } date)
+                    {
+                        <div class="yil__gun yil__gun--bos" aria-hidden="true"></div>
+                        continue;
+                    }
+
+                    var count = _density.TryGetValue(date, out var value) ? value : 0;
+                    var classes = new List<string> { "yil__gun" };
+                    if (date == State.Today) classes.Add("yil__gun--bugun");
+                    if (State.IsDayOff(date)) classes.Add("yil__gun--tatil");
+
+                    <button type="button"
+                            class="@string.Join(' ', classes)"
+                            data-doluluk="@HeatLevel(count)"
+                            role="gridcell"
+                            title="@Tooltip(date, count)"
+                            aria-label="@Tooltip(date, count)"
+                            @onclick="() => OpenDay(date)">@date.Day</button>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    /// <summary>Gün başına etkinlik sayısı; ısı haritasının kaynağı.</summary>
+    private Dictionary<LocalDate, int> _density = [];
+
+    protected override void OnParametersSet()
+    {
+        // Yıl görünümünde binlerce örnek olabilir; her hücrede yeniden saymak yerine
+        // bir kez gruplanır.
+        _density = State.Occurrences
+            .SelectMany(SpannedDays)
+            .GroupBy(d => d)
+            .ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    /// <summary>Çok günlü etkinlikler dokundukları her günde sayılır.</summary>
+    private static IEnumerable<LocalDate> SpannedDays(EventOccurrence occurrence)
+    {
+        var last = occurrence.IsAllDay
+            ? occurrence.EndLocal.Date.PlusDays(-1)
+            : occurrence.EndLocal.TimeOfDay == LocalTime.Midnight
+                ? occurrence.EndLocal.Date.PlusDays(-1)
+                : occurrence.EndLocal.Date;
+
+        for (var day = occurrence.StartLocal.Date; day <= last; day = day.PlusDays(1))
+        {
+            yield return day;
+        }
+    }
+
+    /// <summary>Sayıyı dört kademeli ısı düzeyine indirger.</summary>
+    private static int HeatLevel(int count) => count switch
+    {
+        0 => 0,
+        1 or 2 => 1,
+        3 or 4 => 2,
+        5 or 6 => 3,
+        _ => 4,
+    };
+
+    private static string Tooltip(LocalDate date, int count)
+        => count == 0
+            ? TurkishFormat.LongDateWithDay(date)
+            : $"{TurkishFormat.LongDateWithDay(date)} — {count} etkinlik";
+
+    /// <summary>Ayın günleri, hafta hizası korunacak biçimde başta boşluklarla.</summary>
+    private IEnumerable<LocalDate?> MonthDays(int month)
+    {
+        var first = new LocalDate(State.View.Anchor.Year, month, 1);
+        var leading = ((int)first.DayOfWeek - 1 + 7) % 7;
+
+        for (var i = 0; i < leading; i++) yield return null;
+
+        var daysInMonth = CalendarSystem.Iso.GetDaysInMonth(first.Year, month);
+        for (var day = 1; day <= daysInMonth; day++) yield return new LocalDate(first.Year, month, day);
+    }
+
+    private Task OpenMonth(int month)
+        => State.SetViewAsync(State.View
+            .WithKind(CalendarViewKind.Month)
+            .GoTo(new LocalDate(State.View.Anchor.Year, month, 1)));
+
+    private Task OpenDay(LocalDate date)
+        => State.SetViewAsync(State.View.WithKind(CalendarViewKind.Day).GoTo(date));
+}

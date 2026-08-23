@@ -1,0 +1,120 @@
+@* Zamanı gelen hatırlatıcıların şeridi. Sağ altta birikir. *@
+@implements IDisposable
+
+@if (_due.Count > 0)
+{
+    <div style="position:fixed;right:18px;bottom:18px;z-index:130;display:flex;flex-direction:column;gap:8px;max-width:min(380px, calc(100vw - 36px))"
+         role="region" aria-label="Hatırlatıcılar">
+
+        @foreach (var reminder in _due)
+        {
+            <div class="onizleme renk-@reminder.Color"
+                 style="position:static;width:auto;gap:8px"
+                 role="alert" aria-live="assertive">
+
+                <div class="onizleme__ust" style="align-items:center">
+                    <span class="onizleme__renk" style="margin-top:0"></span>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-size:11px;color:var(--metin-3);text-transform:uppercase;letter-spacing:.05em">
+                            @TurkishFormat.ReminderOffset(reminder.MinutesBefore)
+                        </div>
+                        <div style="font-size:16px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @reminder.Title
+                        </div>
+                    </div>
+                </div>
+
+                <div class="onizleme__zaman">
+                    @TurkishFormat.OccurrenceTime(reminder.StartLocal, reminder.EndLocal, reminder.IsAllDay)
+                    @if (!string.IsNullOrWhiteSpace(reminder.LocationText))
+                    {
+                        <span> · @reminder.LocationText</span>
+                    }
+                </div>
+
+                <div class="onizleme__dugmeler">
+                    <button class="dugme dugme--sade" @onclick="() => Snooze(reminder, 5)">5 dk ertele</button>
+                    <button class="dugme dugme--sade" @onclick="() => Snooze(reminder, 15)">15 dk</button>
+                    <span style="flex:1"></span>
+                    <button class="dugme dugme--sade" @onclick="() => Dismiss(reminder)">Kapat</button>
+                </div>
+            </div>
+        }
+
+        @if (_due.Count > 1)
+        {
+            <button class="dugme" style="align-self:flex-end" @onclick="DismissAll">
+                Tümünü kapat (@_due.Count)
+            </button>
+        }
+    </div>
+}
+
+@code {
+    [Inject] public required ReminderBroadcast Broadcast { get; set; }
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    private readonly List<DueReminder> _due = [];
+
+    protected override void OnInitialized() => Broadcast.Fired += OnFired;
+
+    private void OnFired(IReadOnlyList<DueReminder> reminders)
+    {
+        InvokeAsync(() =>
+        {
+            var added = false;
+
+            foreach (var reminder in reminders)
+            {
+                // Zamanlayıcı yarım dakikada bir çalışır; aynı hatırlatıcı
+                // kullanıcı kapatana kadar tekrar gelir, listede çoğalmamalı.
+                if (_due.Any(d => d.ReminderId == reminder.ReminderId
+                               && d.OccurrenceStartUtc == reminder.OccurrenceStartUtc))
+                {
+                    continue;
+                }
+
+                _due.Add(reminder);
+                added = true;
+            }
+
+            if (added) StateHasChanged();
+        });
+    }
+
+    private async Task Snooze(DueReminder reminder, int minutes)
+    {
+        _due.Remove(reminder);
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<ReminderService>();
+        await service.SnoozeAsync(reminder.ReminderId, Duration.FromMinutes(minutes));
+
+        StateHasChanged();
+    }
+
+    private async Task Dismiss(DueReminder reminder)
+    {
+        _due.Remove(reminder);
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<ReminderService>();
+        await service.MarkFiredAsync(reminder.ReminderId, reminder.OccurrenceStartUtc);
+
+        StateHasChanged();
+    }
+
+    private async Task DismissAll()
+    {
+        var snapshot = _due.ToList();
+        _due.Clear();
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<ReminderService>();
+        await service.DismissAllAsync(snapshot);
+
+        StateHasChanged();
+    }
+
+    public void Dispose() => Broadcast.Fired -= OnFired;
+}

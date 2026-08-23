@@ -1,0 +1,37 @@
+@* Belge iskeleti. Tema, sayfa çizilmeden önce uygulanır ki açılışta beyaz parlama olmasın. *@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["Takvim.Server.styles.css"]" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%85%3C/text%3E%3C/svg%3E" />
+    <ImportMap />
+    <HeadOutlet />
+    <script>
+        // Tema seçimi ilk boyamadan önce uygulanır; aksi hâlde koyu temada
+        // bir kare boyunca beyaz ekran görünür.
+        (function () {
+            try {
+                var stored = localStorage.getItem('takvim-tema');
+                var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'koyu' : 'acik');
+                document.documentElement.setAttribute('data-tema', theme);
+            } catch (e) {
+                document.documentElement.setAttribute('data-tema', 'acik');
+            }
+        })();
+    </script>
+</head>
+
+<body>
+    <Routes />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="@Assets["takvim.js"]"></script>
+</body>
+
+</html>
