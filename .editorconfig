@@ -26,6 +26,12 @@ dotnet_sort_system_directives_first = true
 [tests/**/*.cs]
 dotnet_diagnostic.CA1707.severity = none
 
+# xUnit1051, iptal belirtecinin her çağrıya geçirilmesini ister. Kuralın amacı
+# uzun süren testlerin iptale hızlı yanıt vermesi; bizim tüm test kümemiz birkaç
+# saniyede bitiyor ve hiçbiri ağ ya da dış kaynak beklemiyor. Belirteci beş yüzü
+# aşkın çağrıya eklemek testleri okunmaz hâle getirirdi.
+dotnet_diagnostic.xUnit1051.severity = none
+
 # EF Core göç dosyaları araç tarafından üretilir; biçim ve analiz kuralları uygulanmaz.
 [**/Migrations/*.cs]
 generated_code = true

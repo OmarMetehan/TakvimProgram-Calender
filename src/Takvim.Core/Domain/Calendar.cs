@@ -38,10 +38,15 @@ public class Calendar
     /// <summary>Tüm gün etkinlikleri için ayrı varsayılan. Gün başlangıcından önceki dakika.</summary>
     public int? DefaultAllDayReminderMinutes { get; set; } = 12 * 60;
 
-    // --- Abone takvimler (Faz 1: ICS beslemesi) ---
+    // --- Abone takvimler ---
+    // NOT: Bu iki alan ileriye dönük ayrılmıştır; dış ICS beslemesine abonelik
+    // henüz uygulanmadı. Şu an hiçbir kod bunları okumuyor ya da yazmıyor.
+    // Sütun eklemek şema göçü gerektirdiği için baştan tanımlandılar.
 
-    /// <summary>Subscribed takvimler için kaynak ICS adresi.</summary>
+    /// <summary>Dış ICS beslemesinin adresi. Abonelik uygulanana kadar kullanılmaz.</summary>
     public string? SourceUrl { get; set; }
+
+    /// <summary>Beslemenin en son ne zaman çekildiği. Abonelik uygulanana kadar kullanılmaz.</summary>
     public DateTimeOffset? LastSyncedAt { get; set; }
 
     // --- Senkronizasyon meta verisi ---

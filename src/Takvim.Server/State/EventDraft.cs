@@ -62,12 +62,6 @@ public sealed class EventDraft
     /// <summary>Etkinliğin organizatörü; katılımcı listesinde ayrı gösterilir.</summary>
     public Guid? OrganizerUserId { get; set; }
 
-    /// <summary>Kaydederken katılımcılara değişiklik bildirilsin mi.</summary>
-    public bool NotifyAttendees { get; set; } = true;
-
-    /// <summary>Yalnızca yeni eklenen katılımcılara bildir.</summary>
-    public bool NotifyOnlyNewAttendees { get; set; }
-
     // ------------------------------------------------------------------
     // Kurulum
     // ------------------------------------------------------------------

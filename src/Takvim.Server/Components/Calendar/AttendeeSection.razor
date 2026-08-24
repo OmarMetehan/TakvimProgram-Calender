@@ -172,15 +172,6 @@
         </div>
     }
 
-    @if (!Draft.IsNew && Draft.Attendees.Count > 0)
-    {
-        <label class="liste-ogesi" style="padding-left:0;margin-top:8px">
-            <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
-                   checked="@Draft.NotifyOnlyNewAttendees"
-                   @onchange="e => Draft.NotifyOnlyNewAttendees = (bool)(e.Value ?? false)" />
-            <span class="liste-ogesi__ad">Yalnızca yeni eklenenlere bildir</span>
-        </label>
-    }
 </div>
 
 @code {

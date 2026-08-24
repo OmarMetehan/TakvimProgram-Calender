@@ -241,6 +241,19 @@
             </div>
         </div>
 
+        <label class="liste-ogesi" style="padding-left:0">
+            <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                   checked="@(!Draft.IsForwardable)"
+                   @onchange="e => Draft.IsForwardable = !(bool)(e.Value ?? false)" />
+            <span class="liste-ogesi__ad">
+                İletilemez
+                <span style="display:block;font-size:11px;color:var(--metin-3)">
+                    Davetliler bu toplantıyı başkasına iletemez. Bir politika işaretidir:
+                    detayı görebilen biri içeriği yine de elle aktarabilir.
+                </span>
+            </span>
+        </label>
+
         @if (HasPrivateCategory && Draft.Visibility == EventVisibility.Public)
         {
             <div role="status" style="font-size:12px;color:var(--uyari)">

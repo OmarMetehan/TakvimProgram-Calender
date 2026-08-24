@@ -146,6 +146,27 @@
                         </div>
                     }
 
+                    @if (_history.Count > 0)
+                    {
+                        <details style="margin-top:10px">
+                            <summary style="cursor:pointer;font-size:13px;color:var(--metin-2)">
+                                Paylaşım geçmişi (@_history.Count kayıt)
+                            </summary>
+                            <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px">
+                                @foreach (var entry in _history.Take(20))
+                                {
+                                    <div style="font-size:12px;color:var(--metin-2)">
+                                        <span style="color:var(--metin-3)">
+                                            @TurkishFormat.DateTime(
+                                                LocalDateTime.FromDateTime(entry.ChangedAt.LocalDateTime))
+                                        </span>
+                                        — @entry.Summary
+                                    </div>
+                                }
+                            </div>
+                        </details>
+                    }
+
                     @if (ShareCandidates.Count > 0)
                     {
                         <div style="display:flex;gap:6px;align-items:end;margin-top:8px">
@@ -189,6 +210,7 @@
     private Guid _calendarId;
     private Guid _newGranteeId;
     private List<CalendarShare> _shares = [];
+    private List<ChangeLogEntry> _history = [];
 
     private static readonly (SharingLevel Level, string Label)[] Levels =
     [
@@ -284,12 +306,10 @@
         }
 
         await using var scope = Scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+        var sharing = scope.ServiceProvider.GetRequiredService<SharingService>();
 
-        _shares = await db.CalendarShares
-            .AsNoTracking()
-            .Where(s => s.CalendarId == _calendarId)
-            .ToListAsync();
+        _shares = await sharing.GetSharesAsync(_calendarId);
+        _history = await sharing.GetHistoryAsync(_calendarId);
     }
 
     private async Task OnCalendarChanged(ChangeEventArgs e)
@@ -303,16 +323,17 @@
     {
         if (_newGranteeId == Guid.Empty || _calendarId == Guid.Empty) return;
 
-        await using (var scope = Scopes.CreateAsyncScope())
+        try
         {
-            var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
-            db.CalendarShares.Add(new CalendarShare
-            {
-                CalendarId = _calendarId,
-                GranteeUserId = _newGranteeId,
-                Level = SharingLevel.FreeBusy,
-            });
-            await db.SaveChangesAsync();
+            await using var scope = Scopes.CreateAsyncScope();
+            var sharing = scope.ServiceProvider.GetRequiredService<SharingService>();
+
+            await sharing.ShareAsync(_calendarId, _newGranteeId, SharingLevel.FreeBusy, State.ActiveUserId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            State.ShowStatus(ex.Message);
+            return;
         }
 
         _newGranteeId = Guid.Empty;
@@ -327,11 +348,7 @@
         });
 
     private Task ToggleDelegate(Guid shareId, ChangeEventArgs e)
-        => UpdateShare(shareId, share =>
-        {
-            share.IsDelegate = (bool)(e.Value ?? false);
-            if (!share.IsDelegate) share.CanSeePrivateItems = false;
-        });
+        => UpdateShare(shareId, share => share.IsDelegate = (bool)(e.Value ?? false));
 
     private Task TogglePrivate(Guid shareId, ChangeEventArgs e)
         => UpdateShare(shareId, share => share.CanSeePrivateItems = (bool)(e.Value ?? false));
@@ -340,13 +357,8 @@
     {
         await using (var scope = Scopes.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
-            var share = await db.CalendarShares.FirstOrDefaultAsync(s => s.Id == shareId);
-            if (share is null) return;
-
-            change(share);
-            share.UpdatedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync();
+            var sharing = scope.ServiceProvider.GetRequiredService<SharingService>();
+            await sharing.UpdateAsync(shareId, State.ActiveUserId, change);
         }
 
         await LoadSharesAsync();
@@ -356,13 +368,8 @@
     {
         await using (var scope = Scopes.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
-            var share = await db.CalendarShares.FirstOrDefaultAsync(s => s.Id == shareId);
-            if (share is not null)
-            {
-                db.CalendarShares.Remove(share);
-                await db.SaveChangesAsync();
-            }
+            var sharing = scope.ServiceProvider.GetRequiredService<SharingService>();
+            await sharing.RevokeAsync(shareId, State.ActiveUserId);
         }
 
         await LoadSharesAsync();
