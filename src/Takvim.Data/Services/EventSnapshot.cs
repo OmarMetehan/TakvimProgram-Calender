@@ -45,10 +45,12 @@ public sealed record EventSnapshot
     public Availability Availability { get; init; }
     public EventVisibility Visibility { get; init; }
     public EventStatus Status { get; init; }
+    public string? CancellationReason { get; init; }
     public bool IsForwardable { get; init; }
     public Guid? OrganizerUserId { get; init; }
 
     public string? RecurrenceRule { get; init; }
+    public HolidayBehavior HolidayBehavior { get; init; }
     public string? ExDates { get; init; }
     public string? RDates { get; init; }
     public string? SeriesEndUtc { get; init; }
@@ -94,9 +96,11 @@ public sealed record EventSnapshot
             Availability = ev.Availability,
             Visibility = ev.Visibility,
             Status = ev.Status,
+            CancellationReason = ev.CancellationReason,
             IsForwardable = ev.IsForwardable,
             OrganizerUserId = ev.OrganizerUserId,
             RecurrenceRule = ev.RecurrenceRule,
+            HolidayBehavior = ev.HolidayBehavior,
             ExDates = ev.ExDates,
             RDates = ev.RDates,
             SeriesEndUtc = ev.SeriesEndUtc is { } end ? InstantPatternUtc.Format(end) : null,
@@ -139,9 +143,11 @@ public sealed record EventSnapshot
         ev.Availability = Availability;
         ev.Visibility = Visibility;
         ev.Status = Status;
+        ev.CancellationReason = CancellationReason;
         ev.IsForwardable = IsForwardable;
         ev.OrganizerUserId = OrganizerUserId;
         ev.RecurrenceRule = RecurrenceRule;
+        ev.HolidayBehavior = HolidayBehavior;
         ev.ExDates = ExDates;
         ev.RDates = RDates;
         ev.SeriesEndUtc = SeriesEndUtc is null ? null : InstantPatternUtc.Parse(SeriesEndUtc).Value;

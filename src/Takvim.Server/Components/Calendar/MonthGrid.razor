@@ -41,6 +41,7 @@
                                Variant="@(occurrence.IsAllDay ? EventChip.ChipVariant.Band : EventChip.ChipVariant.Row)"
                                Color="@State.ColorOf(occurrence)"
                                Continues="occurrence.IsAllDay && occurrence.StartLocal.Date < day"
+                               SearchMatch="@(State.IsSearching ? State.MatchesSearch(occurrence) : null)"
                                OnActivate="OnActivate" />
                 }
 

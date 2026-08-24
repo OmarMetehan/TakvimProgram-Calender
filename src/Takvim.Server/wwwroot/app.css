@@ -1437,3 +1437,63 @@ kbd {
     word-break: break-all;
     user-select: all;
 }
+
+/* Izgarada sürüklenerek seçilen aralık */
+.secim-onizleme {
+    position: absolute;
+    left: 2px; right: 3px;
+    background: color-mix(in srgb, var(--birincil) 22%, transparent);
+    border: 1px solid var(--birincil);
+    border-radius: var(--yuvarlak-s);
+    pointer-events: none;
+    z-index: 25;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 2px;
+}
+
+.secim-onizleme span {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--birincil);
+    background: var(--zemin);
+    padding: 0 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+/* Sürükleme sırasında metin seçilmesin */
+.gun-sutunu { user-select: none; }
+
+/* Arama: eşleşmeyenler geri planda kalır, eşleşenler öne çıkar */
+.olay--eslesmiyor { opacity: .28; filter: saturate(.35); }
+.olay--eslesmiyor:hover { opacity: .6; }
+
+.olay--eslesti {
+    outline: 2px solid var(--uyari);
+    outline-offset: 1px;
+    z-index: 28 !important;
+}
+
+.arama__sayac {
+    position: absolute;
+    right: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--birincil);
+    background: var(--birincil-yumusak);
+    padding: 1px 7px;
+    border-radius: 9px;
+    pointer-events: none;
+}
+
+/* İptal edilmiş toplantı şeridi */
+.iptal-serit {
+    border: 1px solid var(--tehlike);
+    background: color-mix(in srgb, var(--tehlike) 10%, transparent);
+    color: var(--tehlike);
+    border-radius: var(--yuvarlak-s);
+    padding: 8px 10px;
+    font-size: 13px;
+}

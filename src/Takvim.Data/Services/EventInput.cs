@@ -56,6 +56,9 @@ public sealed record EventInput
     /// <summary>RFC 5545 RRULE metni. Null ise tekrarlamaz.</summary>
     public string? RecurrenceRule { get; init; }
 
+    /// <summary>Resmi tatile denk gelen örneklere ne olacağı.</summary>
+    public HolidayBehavior HolidayBehavior { get; init; } = HolidayBehavior.Include;
+
     public IReadOnlyList<Guid> CategoryIds { get; init; } = [];
 
     public IReadOnlyList<ReminderInput> Reminders { get; init; } = [];

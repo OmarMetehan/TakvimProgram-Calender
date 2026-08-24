@@ -75,6 +75,7 @@
                                Color="@State.ColorOf(occurrence)"
                                ShowTime="false"
                                Continues="occurrence.StartLocal.Date < column.Day"
+                               SearchMatch="@(State.IsSearching ? State.MatchesSearch(occurrence) : null)"
                                OnActivate="OnActivate" />
                 }
             </div>
@@ -100,7 +101,9 @@
                 if (State.IsDayOff(day)) classes.Add("gun-sutunu--tatil");
 
                 <div class="@string.Join(' ', classes)"
-                     @onclick="e => CreateAt(column, e)"
+                     @onmousedown="e => BeginSelection(column, e)"
+                     @onmousemove="e => ExtendSelection(column, e)"
+                     @onmouseup="e => CompleteSelection(column, e)"
                      @ondragover:preventDefault="true"
                      @ondrop="e => Drop(column, e)">
 
@@ -136,6 +139,13 @@
                              aria-label="Şu an @TurkishFormat.Time(State.Now)"></div>
                     }
 
+                    @if (SelectionIn(column) is { } selection)
+                    {
+                        <div class="secim-onizleme" style="@selection.Style">
+                            <span>@selection.Label</span>
+                        </div>
+                    }
+
                     @foreach (var placed in Layout(column))
                     {
                         <EventChip Occurrence="placed.Occurrence"
@@ -143,6 +153,7 @@
                                    Color="@State.ColorOf(placed.Occurrence)"
                                    Style="@BlockStyle(placed)"
                                    Compact="placed.Height < 0.035"
+                                   SearchMatch="@(State.IsSearching ? State.MatchesSearch(placed.Occurrence) : null)"
                                    Draggable="@placed.Occurrence.CanEdit"
                                    OnActivate="OnActivate"
                                    OnDragStarted="() => _dragging = placed.Occurrence"
@@ -309,11 +320,112 @@
     private double SlotHeightPixels()
         => State.View.Density == GridDensity.Compact ? 36 : 52;
 
-    private async Task CreateAt(GridColumn column, MouseEventArgs e)
+    // ------------------------------------------------------------------
+    // Sürükleyerek aralık seçme
+    // ------------------------------------------------------------------
+
+    /// <summary>Sürükleme başladığı sütun; seçim bu sütunda kalır.</summary>
+    private GridColumn? _selectionColumn;
+
+    private LocalTime _selectionAnchor;
+    private LocalTime _selectionCursor;
+
+    /// <summary>
+    /// Sürükleme sayılması için gereken en küçük hareket. Bu eşiğin altında
+    /// kalan basma-bırakma, tek tıklamadır ve varsayılan uzunlukta etkinlik açar.
+    /// </summary>
+    private const int DragThresholdMinutes = SlotMinutes;
+
+    private bool _dragged;
+
+    private void BeginSelection(GridColumn column, MouseEventArgs e)
     {
-        var start = column.Day + TimeFromOffset(e.OffsetY, 24 * SlotHeightPixels());
-        await OnCreateSlot.InvokeAsync((start, start.PlusMinutes(60), false));
+        // Yalnızca sol tuş; sağ tuş menüsü seçim başlatmamalı.
+        if (e.Button != 0) return;
+
+        _selectionColumn = column;
+        _selectionAnchor = TimeFromOffset(e.OffsetY, 24 * SlotHeightPixels());
+        _selectionCursor = _selectionAnchor;
+        _dragged = false;
     }
+
+    private void ExtendSelection(GridColumn column, MouseEventArgs e)
+    {
+        if (_selectionColumn is not { } start) return;
+
+        // Fare düğmesi bırakılmışsa (pencere dışında olabilir) seçim iptal edilir.
+        if ((e.Buttons & 1) == 0)
+        {
+            _selectionColumn = null;
+            return;
+        }
+
+        // Seçim başladığı sütunda kalır; günler arası sürükleme etkinlik taşımadır.
+        if (!column.Equals(start)) return;
+
+        var cursor = TimeFromOffset(e.OffsetY, 24 * SlotHeightPixels());
+        if (cursor == _selectionCursor) return;
+
+        _selectionCursor = cursor;
+        _dragged = Math.Abs(MinutesBetween(_selectionAnchor, _selectionCursor)) >= DragThresholdMinutes;
+    }
+
+    private async Task CompleteSelection(GridColumn column, MouseEventArgs e)
+    {
+        if (_selectionColumn is not { } start)
+        {
+            _selectionColumn = null;
+            return;
+        }
+
+        var dragged = _dragged;
+        var (from, to) = SelectionRange();
+
+        _selectionColumn = null;
+        _dragged = false;
+
+        // Sürüklenmediyse tek tıklama: varsayılan bir saatlik etkinlik.
+        if (!dragged)
+        {
+            var clicked = start.Day + TimeFromOffset(e.OffsetY, 24 * SlotHeightPixels());
+            await OnCreateSlot.InvokeAsync((clicked, clicked.PlusMinutes(60), false));
+            return;
+        }
+
+        await OnCreateSlot.InvokeAsync((start.Day + from, start.Day + to, false));
+    }
+
+    /// <summary>Seçimin başlangıcı ve bitişi; hangi yöne sürüklendiğinden bağımsız.</summary>
+    private (LocalTime From, LocalTime To) SelectionRange()
+    {
+        var from = _selectionAnchor <= _selectionCursor ? _selectionAnchor : _selectionCursor;
+        var to = _selectionAnchor <= _selectionCursor ? _selectionCursor : _selectionAnchor;
+
+        // Bitiş, imlecin bulunduğu dilimin sonudur: 09:00'dan 09:15'e sürüklemek
+        // 09:00-09:30 aralığı demektir.
+        var end = to.PlusMinutes(SlotMinutes);
+
+        return (from, end);
+    }
+
+    /// <summary>Bu sütunda çizilecek seçim önizlemesi; yoksa null.</summary>
+    private (string Style, string Label)? SelectionIn(GridColumn column)
+    {
+        if (_selectionColumn is not { } start || !column.Equals(start) || !_dragged) return null;
+
+        var (from, to) = SelectionRange();
+        var top = MinutesFromMidnight(from) / (24.0 * 60);
+        var height = MinutesBetween(from, to) / (24.0 * 60);
+
+        var label = TurkishFormat.TimeRange(start.Day + from, start.Day + to);
+
+        return ($"top:{Percent(top)};height:{Percent(height)}", label);
+    }
+
+    private static double MinutesFromMidnight(LocalTime time) => time.Hour * 60 + time.Minute;
+
+    private static double MinutesBetween(LocalTime from, LocalTime to)
+        => MinutesFromMidnight(to) - MinutesFromMidnight(from);
 
     private Task CreateAllDay(GridColumn column)
         => OnCreateSlot.InvokeAsync((column.Day.AtMidnight(), column.Day.PlusDays(1).AtMidnight(), true));

@@ -64,6 +64,7 @@
                       OnDuplicate="Duplicate"
                       OnDelete="DeleteFromPreview"
                       OnResponded="OnRsvpResponded"
+                      OnCancelMeeting="() => _cancelling = preview.Occurrence"
                       OnClose="ClosePreview" />
     }
 
@@ -132,6 +133,29 @@
                      OnCancel="() => { _pendingScope = null; StateHasChanged(); }" />
     }
 
+    @if (_cancelling is { } cancelling)
+    {
+        <div class="perde" @onclick="() => { _cancelling = null; StateHasChanged(); }"></div>
+
+        <div class="kutu" role="dialog" aria-modal="true" aria-label="Toplantıyı iptal et">
+            <h2 class="kutu__baslik">Toplantıyı iptal et</h2>
+            <p class="kutu__aciklama">
+                "@cancelling.DisplayTitle" iptal edilecek. Etkinlik silinmez:
+                katılımcıların takviminde üstü çizili kalır ve gerekçenizi görürler.
+            </p>
+
+            <input class="alan" placeholder="Gerekçe (isteğe bağlı)"
+                   @bind="_cancelReason" @bind:event="oninput" />
+
+            <div class="kutu__dugmeler">
+                <button class="dugme" @onclick="() => { _cancelling = null; StateHasChanged(); }">Vazgeç</button>
+                <button class="dugme dugme--birincil dugme--tehlike" @onclick="ConfirmCancelMeeting">
+                    Toplantıyı iptal et
+                </button>
+            </div>
+        </div>
+    }
+
     <NotificationBar />
     <ReminderToast />
 </CascadingValue>
@@ -152,6 +176,8 @@
     private LocalDateTime? _quickCreateStart;
     private LocalDate? _workScheduleDate;
     private List<Attendee> _previewAttendees = [];
+    private EventOccurrence? _cancelling;
+    private string _cancelReason = "";
 
     /// <summary>Tekrarlayan bir etkinliğe uygulanacak, kapsam seçimini bekleyen işlem.</summary>
     private Func<SeriesEditScope, Task>? _pendingScope;
@@ -377,6 +403,23 @@
 
         _panel = Panel.Editor;
         StateHasChanged();
+    }
+
+    /// <summary>Toplantıyı iptal eder; silmez.</summary>
+    private async Task ConfirmCancelMeeting()
+    {
+        if (_cancelling is not { } occurrence) return;
+
+        var reason = _cancelReason;
+        var eventId = occurrence.SeriesRootId;
+
+        _cancelling = null;
+        _cancelReason = "";
+        _preview = null;
+
+        await RunWrite(async events =>
+            await events.CancelMeetingAsync(eventId, reason, State.ActiveUserId),
+            "Toplantı iptal edildi.");
     }
 
     private void ClosePreview()
@@ -770,6 +813,8 @@
         _pendingScope = null;
         _quickCreateStart = null;
         _workScheduleDate = null;
+        _cancelling = null;
+        _cancelReason = "";
         StateHasChanged();
     }
 

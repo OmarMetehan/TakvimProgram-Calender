@@ -466,6 +466,8 @@ public sealed class CalDavStore(
         target.StartUtc = incoming.StartUtc;
         target.EndUtc = incoming.EndUtc;
         target.RecurrenceRule = incoming.RecurrenceRule;
+        // Tatil kuralı iCalendar'da karşılığı olmayan yerel bir ayardır;
+        // dış istemciden gelen yazma onu silmemeli.
         target.ExDates = incoming.ExDates;
         target.RDates = incoming.RDates;
         target.Availability = incoming.Availability;

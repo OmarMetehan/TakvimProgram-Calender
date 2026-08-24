@@ -54,6 +54,24 @@ public enum ReminderChannel
     Push = 2,
 }
 
+/// <summary>
+/// Tekrarlayan bir etkinliğin resmi tatile denk gelen örneğine ne olacağı.
+/// </summary>
+public enum HolidayBehavior
+{
+    /// <summary>Tatilde de olsa örnek üretilir.</summary>
+    Include = 0,
+
+    /// <summary>Tatile denk gelen örnek hiç üretilmez.</summary>
+    Skip = 1,
+
+    /// <summary>
+    /// Örnek, tatilden sonraki ilk iş gününe ertelenir. Hafta sonları da
+    /// atlanır: pazartesi toplantısını cumartesiye taşımak işe yaramaz.
+    /// </summary>
+    MoveToNextWorkingDay = 2,
+}
+
 /// <summary>Değişiklik günlüğüne yazılan işlem türü.</summary>
 public enum ChangeOperation
 {

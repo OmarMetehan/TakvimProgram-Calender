@@ -53,6 +53,9 @@ public sealed class EventDraft
     public RecurrencePreset RecurrencePreset { get; set; } = RecurrencePreset.None;
     public string? CustomRecurrenceRule { get; set; }
 
+    /// <summary>Resmi tatile denk gelen örneklere ne olacağı.</summary>
+    public HolidayBehavior HolidayBehavior { get; set; } = HolidayBehavior.Include;
+
     public List<Guid> CategoryIds { get; set; } = [];
     public List<ReminderInput> Reminders { get; set; } = [];
 
@@ -119,6 +122,7 @@ public sealed class EventDraft
             Attendees = [.. source.Attendees.Select(AttendeeDraft.From)],
             OrganizerUserId = source.OrganizerUserId,
             CustomRecurrenceRule = source.RecurrenceRule,
+            HolidayBehavior = source.HolidayBehavior,
             RecurrencePreset = source.RecurrenceRule is null ? RecurrencePreset.None : RecurrencePreset.Custom,
         };
 
@@ -223,6 +227,7 @@ public sealed class EventDraft
         Visibility = Visibility,
         IsForwardable = IsForwardable,
         RecurrenceRule = EffectiveRecurrenceRule,
+        HolidayBehavior = HolidayBehavior,
         CategoryIds = CategoryIds,
         Reminders = Reminders,
         ActorUserId = actorUserId,

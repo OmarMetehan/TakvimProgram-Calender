@@ -16,7 +16,11 @@ public sealed record OccurrenceFilter
     /// <summary>Seçili kategoriler. Boşsa kategori süzmesi uygulanmaz.</summary>
     public IReadOnlyList<Guid> CategoryIds { get; init; } = [];
 
-    /// <summary>Serbest metin. Başlık, açıklama ve konumda aranır.</summary>
+    /// <summary>
+    /// Serbest metin. Başlık, açıklama, konum ve katılımcılarda aranır.
+    /// Eşleşmeyen örnekler <b>elenir</b>; ızgarada vurgulama isteniyorsa bunun
+    /// yerine görünüm durumundaki arama terimi kullanılır.
+    /// </summary>
     public string? SearchTerm { get; init; }
 
     public IReadOnlyList<Availability> Availabilities { get; init; } = [];

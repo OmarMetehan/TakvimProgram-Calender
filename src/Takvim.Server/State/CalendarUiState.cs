@@ -150,11 +150,13 @@ public sealed class CalendarUiState(
             await using var scope = scopeFactory.CreateAsyncScope();
             var query = scope.ServiceProvider.GetRequiredService<CalendarQueryService>();
 
+            // Arama ızgarada süzmez, vurgular: eşleşen etkinliği bağlamı içinde
+            // görmek, bağlamsız bir liste görmekten daha kullanışlı. Bu yüzden
+            // sorguya arama terimi geçilmez.
             var filter = new OccurrenceFilter
             {
                 CalendarIds = [.. VisibleCalendars.Select(c => c.Id)],
                 CategoryIds = View.CategoryFilter,
-                SearchTerm = View.SearchTerm,
             };
 
             _occurrences = await query
@@ -306,6 +308,26 @@ public sealed class CalendarUiState(
     // ------------------------------------------------------------------
     // Yardımcılar
     // ------------------------------------------------------------------
+
+    /// <summary>Arama etkin mi.</summary>
+    public bool IsSearching => !string.IsNullOrWhiteSpace(View.SearchTerm);
+
+    /// <summary>
+    /// Örnek, aranan ifadeyle eşleşiyor mu. Karartılmış örnekler hiçbir zaman
+    /// eşleşmez: içeriklerini göremeyen biri onların içinde arama da yapamaz.
+    /// </summary>
+    public bool MatchesSearch(EventOccurrence occurrence)
+    {
+        ArgumentNullException.ThrowIfNull(occurrence);
+
+        if (!IsSearching) return true;
+        if (!occurrence.CanSeeDetails) return false;
+
+        return Takvim.Core.Text.TurkishText.Contains(occurrence.Source.SearchText, View.SearchTerm);
+    }
+
+    /// <summary>Görünen aralıkta arama kaç örnekle eşleşti.</summary>
+    public int SearchMatchCount => IsSearching ? _occurrences.Count(MatchesSearch) : 0;
 
     /// <summary>Takvimin rengini verir; etkinliğin kendi rengi varsa o öne geçer.</summary>
     public string ColorOf(EventOccurrence occurrence)

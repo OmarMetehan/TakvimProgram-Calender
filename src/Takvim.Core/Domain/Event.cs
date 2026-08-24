@@ -99,6 +99,13 @@ public class Event
 
     public EventStatus Status { get; set; } = EventStatus.Confirmed;
 
+    /// <summary>
+    /// Toplantı iptal edildiyse gerekçesi. İptal edilen toplantı silinmez:
+    /// katılımcıların takviminde üstü çizili olarak durur ve neden iptal
+    /// edildiğini görürler. Silmek bu bilgiyi yok ederdi.
+    /// </summary>
+    public string? CancellationReason { get; set; }
+
     /// <summary>False ise davet başkalarına iletilemez.</summary>
     public bool IsForwardable { get; set; } = true;
 
@@ -125,6 +132,11 @@ public class Event
     /// Aralık sorgularının süresiz serileri gereksiz yere genişletmesini önler.
     /// </summary>
     public Instant? SeriesEndUtc { get; set; }
+
+    /// <summary>
+    /// Resmi tatile denk gelen örneklere ne olacağı. Yalnızca seri kökünde anlamlıdır.
+    /// </summary>
+    public HolidayBehavior HolidayBehavior { get; set; } = HolidayBehavior.Include;
 
     /// <summary>Bu satır bir istisna ise, yerini aldığı örneğin özgün başlangıç saati (RECURRENCE-ID).</summary>
     public LocalDateTime? RecurrenceId { get; set; }

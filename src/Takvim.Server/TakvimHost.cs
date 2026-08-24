@@ -69,6 +69,8 @@ public static class TakvimHost
         // Durumsuz çekirdek servisler tek örnek olarak paylaşılır.
         builder.Services.AddSingleton<IClock>(SystemClock.Instance);
         builder.Services.AddSingleton<TimeZoneService>();
+        // Tekrarlama motoru tatil takvimini de alır: "tatile denk gelen örneği
+        // atla" kuralı ancak tatilleri bilerek uygulanabilir.
         builder.Services.AddSingleton<RecurrenceExpander>();
         builder.Services.AddSingleton<IcsSerializer>();
         builder.Services.AddSingleton<TurkishHolidays>();

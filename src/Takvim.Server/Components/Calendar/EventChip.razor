@@ -81,6 +81,12 @@
     /// <summary>Çok günlü bir etkinliğin devam eden günü mü.</summary>
     [Parameter] public bool Continues { get; set; }
 
+    /// <summary>
+    /// Arama etkinken bu örnek eşleşiyor mu. Eşleşmeyenler soluklaşır; aranan
+    /// etkinlik bağlamı içinde görünür, ızgaradan silinmez.
+    /// </summary>
+    [Parameter] public bool? SearchMatch { get; set; }
+
     /// <summary>Sürüklenebilirlik yetkiye bağlıdır; göremediğini taşıyamazsın.</summary>
     [Parameter] public bool Draggable { get; set; }
 
@@ -121,6 +127,10 @@
 
             if (Occurrence.Source.Status == EventStatus.Cancelled) classes.Add("olay--iptal");
 
+            // Arama etkinse eşleşmeyenler geri plana çekilir.
+            if (SearchMatch == false) classes.Add("olay--eslesmiyor");
+            else if (SearchMatch == true) classes.Add("olay--eslesti");
+
             return string.Join(' ', classes);
         }
     }
@@ -132,7 +142,14 @@
             var time = TurkishFormat.OccurrenceTime(Occurrence.StartLocal, Occurrence.EndLocal, Occurrence.IsAllDay);
             var location = string.IsNullOrWhiteSpace(Occurrence.DisplayLocation)
                 ? "" : "\n" + Occurrence.DisplayLocation;
-            return $"{DisplayTitle}\n{time}{location}";
+
+            var cancelled = Occurrence.Source.Status == EventStatus.Cancelled
+                ? "\nİPTAL EDİLDİ" +
+                  (string.IsNullOrWhiteSpace(Occurrence.Source.CancellationReason)
+                      ? "" : ": " + Occurrence.Source.CancellationReason)
+                : "";
+
+            return $"{DisplayTitle}\n{time}{location}{cancelled}";
         }
     }
 

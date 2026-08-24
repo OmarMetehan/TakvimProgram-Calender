@@ -3,6 +3,7 @@ using Ical.Net.DataTypes;
 using NodaTime;
 using NodaTime.Text;
 using Takvim.Core.Domain;
+using Takvim.Core.Localization;
 using Takvim.Core.Time;
 
 // Ical.Net ve NodaTime aynı adları taşıyan tipler sunar; bu dosyada zaman
@@ -17,8 +18,15 @@ namespace Takvim.Core.Recurrence;
 /// RRULE üretimi Ical.Net'e bırakılır; istisnaların birleştirilmesi ve
 /// süre aritmetiği burada yapılır.
 /// </summary>
-public sealed class RecurrenceExpander(TimeZoneService timeZones)
+public sealed class RecurrenceExpander(TimeZoneService timeZones, TurkishHolidays? holidays = null)
 {
+    /// <summary>
+    /// Tatil ertelemesinde en fazla kaç gün ileri bakılacağı. Ardışık tatiller
+    /// (dört günlük Kurban Bayramı gibi) aşılabilmeli, ama bozuk bir veri
+    /// sonsuz döngüye yol açmamalı.
+    /// </summary>
+    private const int MaxHolidayShiftDays = 14;
+
     /// <summary>
     /// Bozuk ya da aşırı yoğun bir kuralın görünümü kilitlemesini önleyen üst sınır.
     /// Tek bir seri, tek bir pencerede bundan fazla örnek üretemez.
@@ -70,8 +78,17 @@ public sealed class RecurrenceExpander(TimeZoneService timeZones)
         var nominalLength = NominalLength(root.StartLocal, root.EndLocal);
 
         // 3) Pencerenin başında hâlâ süren örnekleri kaçırmamak için değerlendirmeyi
-        //    bir örnek boyu geriden başlatırız.
-        var searchFrom = fromInclusive - MaxDuration(root, nominalLength);
+        //    bir örnek boyu geriden başlatırız. Tatil ertelemesi açıksa daha da
+        //    geriden: pencereden önce üretilen bir örnek, tatil nedeniyle
+        //    pencerenin içine kaymış olabilir.
+        var lookBack = MaxDuration(root, nominalLength);
+
+        if (root.HolidayBehavior == HolidayBehavior.MoveToNextWorkingDay)
+        {
+            lookBack += Duration.FromDays(MaxHolidayShiftDays);
+        }
+
+        var searchFrom = fromInclusive - lookBack;
 
         var produced = 0;
         foreach (var startLocal in GenerateStarts(root, searchFrom, toExclusive))
@@ -81,20 +98,29 @@ public sealed class RecurrenceExpander(TimeZoneService timeZones)
             if (excluded.Contains(startLocal)) continue;
             if (overrides.ContainsKey(startLocal)) continue; // istisna ayrıca yayılır
 
-            var endLocal = startLocal + nominalLength;
-            var startUtc = ToInstant(startLocal, root.StartTimeZoneId, root);
+            // Tatil kuralı, örnek üretildikten sonra uygulanır: kuralın kendisi
+            // (RRULE) tatilden habersizdir, tatil takvimi ayrı bir kaynaktır.
+            var adjusted = ApplyHolidayRule(root, startLocal);
+            if (adjusted is not { } effectiveStart) continue;
+
+            var endLocal = effectiveStart + nominalLength;
+            var startUtc = ToInstant(effectiveStart, root.StartTimeZoneId, root);
             var endUtc = ToInstant(endLocal, root.EndTimeZoneId ?? root.StartTimeZoneId, root);
 
-            if (startUtc >= toExclusive) yield break;
+            // Erteleme pencereden ileri taşımış olabilir; akışı kesmek yerine
+            // bu örneği atlarız, sonraki örnek pencerede olabilir.
+            if (startUtc >= toExclusive) continue;
             if (endUtc <= fromInclusive) continue;
 
             yield return new EventOccurrence
             {
                 Source = root,
-                StartLocal = startLocal,
+                StartLocal = effectiveStart,
                 EndLocal = endLocal,
                 StartUtc = startUtc,
                 EndUtc = endUtc,
+                // Örneğin seri içindeki kimliği özgün saattir; ertelenmiş olsa da
+                // "bu etkinliği düzenle" doğru örneği bulabilmeli.
                 RecurrenceId = startLocal,
             };
         }
@@ -237,6 +263,32 @@ public sealed class RecurrenceExpander(TimeZoneService timeZones)
         }
 
         return calendarEvent;
+    }
+
+    /// <summary>
+    /// Tatil kuralını uygular. Örnek atlanacaksa null, ertelenecekse yeni
+    /// başlangıç, kural yoksa gelen başlangıç döner.
+    /// </summary>
+    private LocalDateTime? ApplyHolidayRule(Event root, LocalDateTime startLocal)
+    {
+        if (root.HolidayBehavior == HolidayBehavior.Include || holidays is null) return startLocal;
+        if (!holidays.IsDayOff(startLocal.Date)) return startLocal;
+
+        if (root.HolidayBehavior == HolidayBehavior.Skip) return null;
+
+        // Erteleme: tatil olmayan ve hafta sonuna denk gelmeyen ilk güne taşınır.
+        var candidate = startLocal.Date;
+
+        for (var step = 0; step < MaxHolidayShiftDays; step++)
+        {
+            candidate = candidate.PlusDays(1);
+
+            var weekend = candidate.DayOfWeek is IsoDayOfWeek.Saturday or IsoDayOfWeek.Sunday;
+            if (!weekend && !holidays.IsDayOff(candidate)) return candidate + startLocal.TimeOfDay;
+        }
+
+        // Bu kadar uzun bir tatil dizisi gerçekte yok; veri bozuksa örnek atlanır.
+        return null;
     }
 
     private Instant ToInstant(LocalDateTime local, string? tzId, Event root)

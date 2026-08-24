@@ -27,6 +27,17 @@
         </div>
     </div>
 
+    @if (Occurrence.Source.Status == EventStatus.Cancelled)
+    {
+        <div class="iptal-serit">
+            <strong>Bu toplantı iptal edildi.</strong>
+            @if (!string.IsNullOrWhiteSpace(Occurrence.Source.CancellationReason))
+            {
+                <div>@Occurrence.Source.CancellationReason</div>
+            }
+        </div>
+    }
+
     @if (Occurrence.IsRecurring)
     {
         <div class="onizleme__satir">
@@ -153,6 +164,10 @@
         {
             <button class="dugme dugme--sade" @onclick="() => OnEdit.InvokeAsync()">Düzenle</button>
             <button class="dugme dugme--sade" @onclick="() => OnDuplicate.InvokeAsync()">Çoğalt</button>
+            @if (HasAttendees && Occurrence.Source.Status != EventStatus.Cancelled)
+            {
+                <button class="dugme dugme--sade" @onclick="() => OnCancelMeeting.InvokeAsync()">İptal et</button>
+            }
             <button class="dugme dugme--sade dugme--tehlike" @onclick="() => OnDelete.InvokeAsync()">Sil</button>
         }
         else
@@ -177,6 +192,11 @@
 
     /// <summary>Davete yanıt verildikten sonra görünümün tazelenmesi için.</summary>
     [Parameter] public EventCallback OnResponded { get; set; }
+
+    /// <summary>Toplantıyı iptal etme isteği; silmekten farklıdır.</summary>
+    [Parameter] public EventCallback OnCancelMeeting { get; set; }
+
+    private bool HasAttendees => Attendees.Count > 0;
 
     /// <summary>Etkinliğin katılımcıları; yalnızca detayları görebilenlere gösterilir.</summary>
     [Parameter] public IReadOnlyList<Attendee> Attendees { get; set; } = [];

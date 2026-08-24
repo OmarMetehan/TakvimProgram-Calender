@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Takvim.Data;
 
@@ -10,9 +11,11 @@ using Takvim.Data;
 namespace Takvim.Data.Migrations
 {
     [DbContext(typeof(TakvimDbContext))]
-    partial class TakvimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260824123521_TatilKurali")]
+    partial class TatilKurali
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -351,9 +354,6 @@ namespace Takvim.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<Guid>("CalendarId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CancellationReason")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Color")

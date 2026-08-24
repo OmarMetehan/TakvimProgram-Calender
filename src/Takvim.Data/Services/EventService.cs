@@ -391,6 +391,33 @@ public sealed class EventService(
             before, EventSnapshot.From(ev), actorUserId, summary);
     }
 
+    /// <summary>
+    /// Toplantıyı iptal eder. Silmekten farklıdır: kayıt durur, katılımcıların
+    /// takviminde üstü çizili görünür ve gerekçe okunabilir. Silmek bu bilgiyi
+    /// yok ederdi — davetliler toplantının neden olmadığını bilemezdi.
+    /// </summary>
+    public async Task<EventWriteResult> CancelMeetingAsync(
+        Guid eventId, string? reason, Guid? actorUserId = null, CancellationToken ct = default)
+    {
+        var ev = await db.Events.FirstOrDefaultAsync(e => e.Id == eventId, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Etkinlik bulunamadı: {eventId}");
+
+        var operationId = Guid.NewGuid();
+        var before = EventSnapshot.From(ev);
+
+        ev.Status = EventStatus.Cancelled;
+        ev.CancellationReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        Touch(ev);
+
+        _log.RecordEvent(operationId, ChangeOperation.Update, ev.Id, ev.CalendarId,
+            before, EventSnapshot.From(ev), actorUserId,
+            summary: $"\"{ev.Title}\" iptal edildi" +
+                     (ev.CancellationReason is null ? "" : $": {ev.CancellationReason}"));
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new EventWriteResult(ev.Id, operationId, "Toplantı iptal edildi");
+    }
+
     /// <summary>Çöp kutusundaki etkinliği geri getirir.</summary>
     public async Task<EventWriteResult> RestoreAsync(Guid eventId, Guid? actorUserId = null, CancellationToken ct = default)
     {
@@ -444,6 +471,7 @@ public sealed class EventService(
         ev.Visibility = input.Visibility;
         ev.IsForwardable = input.IsForwardable;
         ev.RecurrenceRule = string.IsNullOrWhiteSpace(input.RecurrenceRule) ? null : input.RecurrenceRule;
+        ev.HolidayBehavior = input.HolidayBehavior;
 
         RecalculateDerived(ev);
         Touch(ev);

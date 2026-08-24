@@ -24,6 +24,13 @@
                aria-label="Etkinliklerde ara"
                value="@State.View.SearchTerm"
                @oninput="OnSearchInput" />
+
+        @if (State.IsSearching)
+        {
+            <span class="arama__sayac" title="Görünen aralıkta eşleşen etkinlik sayısı">
+                @State.SearchMatchCount
+            </span>
+        }
     </div>
 
     <div class="gorunum-secici" role="group" aria-label="Görünüm seçimi">

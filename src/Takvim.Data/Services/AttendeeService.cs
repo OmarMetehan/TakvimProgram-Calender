@@ -121,6 +121,32 @@ public sealed class AttendeeService(TakvimDbContext db, IClock clock)
         }
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await RefreshSearchTextAsync(eventId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Etkinliğin arama metnine katılımcı adlarını da katar.
+    /// <para>
+    /// Arama tek bir normalleştirilmiş sütun üzerinden çalışır; katılımcıları
+    /// ayrı bir tabloda aramak hem yavaş olurdu hem de Türkçe normalleştirmeyi
+    /// iki yerde tekrarlamayı gerektirirdi.
+    /// </para>
+    /// </summary>
+    private async Task RefreshSearchTextAsync(Guid eventId, CancellationToken ct)
+    {
+        var ev = await db.Events
+            .Include(e => e.Attendees)
+            .FirstOrDefaultAsync(e => e.Id == eventId, ct).ConfigureAwait(false);
+
+        if (ev is null) return;
+
+        var parts = new List<string?> { ev.Title, ev.DescriptionHtml, ev.LocationText };
+        parts.AddRange(ev.Attendees.Select(a => a.DisplayName));
+        parts.AddRange(ev.Attendees.Select(a => a.Email));
+
+        ev.SearchText = Takvim.Core.Text.TurkishText.BuildSearchText([.. parts]);
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     // ==================================================================
