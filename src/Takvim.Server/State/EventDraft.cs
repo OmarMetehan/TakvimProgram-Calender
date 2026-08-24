@@ -27,6 +27,8 @@ public sealed class EventDraft
     public Guid CalendarId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? DescriptionHtml { get; set; }
+    public string? AgendaText { get; set; }
+    public string? PrivateNotes { get; set; }
     public string? LocationText { get; set; }
     public string? OnlineMeetingUrl { get; set; }
     public string? OnlineMeetingProvider { get; set; }
@@ -105,6 +107,8 @@ public sealed class EventDraft
             CalendarId = source.CalendarId,
             Title = source.Title,
             DescriptionHtml = source.DescriptionHtml,
+            AgendaText = source.AgendaText,
+            PrivateNotes = source.PrivateNotes,
             LocationText = source.LocationText,
             OnlineMeetingUrl = source.OnlineMeetingUrl,
             OnlineMeetingProvider = source.OnlineMeetingProvider,
@@ -214,6 +218,8 @@ public sealed class EventDraft
         CalendarId = CalendarId,
         Title = string.IsNullOrWhiteSpace(Title) ? "(başlıksız)" : Title.Trim(),
         DescriptionHtml = DescriptionHtml,
+        AgendaText = string.IsNullOrWhiteSpace(AgendaText) ? null : AgendaText.Trim(),
+        PrivateNotes = string.IsNullOrWhiteSpace(PrivateNotes) ? null : PrivateNotes.Trim(),
         LocationText = string.IsNullOrWhiteSpace(LocationText) ? null : LocationText.Trim(),
         OnlineMeetingUrl = string.IsNullOrWhiteSpace(OnlineMeetingUrl) ? null : OnlineMeetingUrl.Trim(),
         OnlineMeetingProvider = OnlineMeetingProvider,

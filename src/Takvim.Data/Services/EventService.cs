@@ -456,6 +456,8 @@ public sealed class EventService(
         ev.CalendarId = input.CalendarId;
         ev.Title = input.Title;
         ev.DescriptionHtml = input.DescriptionHtml;
+        ev.AgendaText = input.AgendaText;
+        ev.PrivateNotes = input.PrivateNotes;
         ev.LocationText = input.LocationText;
         ev.OnlineMeetingUrl = input.OnlineMeetingUrl;
         ev.OnlineMeetingProvider = input.OnlineMeetingProvider;
@@ -494,7 +496,7 @@ public sealed class EventService(
         ev.StartUtc = timeZones.ToInstant(ev.StartLocal, startZone);
         ev.EndUtc = timeZones.ToInstant(ev.EndLocal, endZone);
 
-        ev.SearchText = TurkishText.BuildSearchText(ev.Title, ev.DescriptionHtml, ev.LocationText);
+        ev.SearchText = TurkishText.BuildSearchText(ev.Title, ev.DescriptionHtml, ev.AgendaText, ev.LocationText);
     }
 
     private void Touch(Event ev)

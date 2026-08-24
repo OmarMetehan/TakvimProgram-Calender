@@ -457,6 +457,7 @@ public sealed class CalDavStore(
     {
         target.Title = incoming.Title;
         target.DescriptionHtml = incoming.DescriptionHtml;
+        target.AgendaText = incoming.AgendaText;
         target.LocationText = incoming.LocationText;
         target.StartLocal = incoming.StartLocal;
         target.EndLocal = incoming.EndLocal;

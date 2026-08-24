@@ -33,6 +33,8 @@ public sealed record EventInput
 
     public string Title { get; init; } = string.Empty;
     public string? DescriptionHtml { get; init; }
+    public string? AgendaText { get; init; }
+    public string? PrivateNotes { get; init; }
     public string? LocationText { get; init; }
     public string? OnlineMeetingUrl { get; init; }
     public string? OnlineMeetingProvider { get; init; }

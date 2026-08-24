@@ -73,6 +73,8 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.Property(x => x.EndTimeZoneId).HasMaxLength(64);
             e.Property(x => x.OnlineMeetingProvider).HasMaxLength(32);
             e.Property(x => x.SearchText).HasMaxLength(4000);
+            e.Property(x => x.AgendaText).HasMaxLength(8000);
+            e.Property(x => x.PrivateNotes).HasMaxLength(8000);
 
             e.HasOne(x => x.Calendar).WithMany(c => c.Events)
                 .HasForeignKey(x => x.CalendarId).OnDelete(DeleteBehavior.Cascade);

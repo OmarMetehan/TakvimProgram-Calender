@@ -1520,3 +1520,64 @@ kbd {
 }
 
 .ek-adi:hover { text-decoration: underline; }
+
+/* Metin biçimlendirme araç çubuğu */
+.bicim-cubugu {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-bottom: 5px;
+}
+
+.bicim-dugmesi {
+    min-width: 28px;
+    padding: 3px 6px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+/* RichText.ToHtml çıktısının gösterimi. Yalnızca burada üretilen etiketler
+   biçimlendirilir; kullanıcı metni kaçışlanmış olarak gelir. */
+.zengin-metin {
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    word-break: break-word;
+}
+
+.zengin-metin p { margin: 0 0 7px }
+.zengin-metin p:last-child { margin-bottom: 0 }
+
+.zengin-metin h3,
+.zengin-metin h4,
+.zengin-metin h5 {
+    margin: 10px 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.zengin-metin h3:first-child,
+.zengin-metin h4:first-child,
+.zengin-metin h5:first-child { margin-top: 0 }
+
+.zengin-metin ul,
+.zengin-metin ol { margin: 0 0 7px; padding-left: 20px }
+
+.zengin-metin li { margin-bottom: 2px }
+
+.zengin-metin code {
+    font-family: ui-monospace, "Cascadia Mono", monospace;
+    font-size: 12px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--yuzey-2);
+}
+
+.zengin-metin blockquote {
+    margin: 0 0 7px;
+    padding-left: 9px;
+    border-left: 3px solid var(--cizgi);
+    color: var(--metin-2);
+}
+
+.zengin-metin del { color: var(--metin-3) }

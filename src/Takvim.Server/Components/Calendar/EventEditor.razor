@@ -301,9 +301,68 @@
 
         <div>
             <label class="etiket" for="olay-aciklama">Açıklama</label>
-            <textarea id="olay-aciklama" class="alan" rows="4" placeholder="Notlar, gündem, bağlantılar"
-                      @bind="Draft.DescriptionHtml" @bind:event="oninput"></textarea>
+
+            <div class="bicim-cubugu" role="toolbar" aria-label="Metin biçimlendirme">
+                @foreach (var tool in Tools)
+                {
+                    <button type="button" class="dugme dugme--sade bicim-dugmesi"
+                            title="@tool.Title" aria-label="@tool.Title"
+                            @onclick="() => ApplyFormat(tool)">@((MarkupString)tool.Label)</button>
+                }
+
+                <span class="panel__bosluk"></span>
+
+                <button type="button" class="dugme dugme--sade bicim-dugmesi"
+                        aria-pressed="@(_previewDescription ? "true" : "false")"
+                        @onclick="() => _previewDescription = !_previewDescription">
+                    @(_previewDescription ? "Düzenle" : "Önizle")
+                </button>
+            </div>
+
+            @if (_previewDescription)
+            {
+                <div class="zengin-metin" aria-live="polite">
+                    @((MarkupString)RichText.ToHtml(Draft.DescriptionHtml))
+                </div>
+            }
+            else
+            {
+                <textarea id="olay-aciklama" class="alan" rows="4"
+                          placeholder="Notlar, bağlantılar. **kalın**, *eğik*, - madde"
+                          @bind="Draft.DescriptionHtml" @bind:event="oninput"></textarea>
+            }
         </div>
+
+        @* ---------- Gündem ve özel notlar ---------- *@
+
+        <details open="@(HasAgendaOrNotes)">
+            <summary style="cursor:pointer;font-size:13px;color:var(--metin-2)">
+                Gündem ve notlar
+            </summary>
+
+            <div style="display:flex;flex-direction:column;gap:10px;padding-top:8px">
+                <div>
+                    <label class="etiket" for="olay-gundem">Gündem</label>
+                    <textarea id="olay-gundem" class="alan" rows="3"
+                              placeholder="1. Açılış&#10;2. Geçen haftanın özeti&#10;3. Karar maddeleri"
+                              @bind="Draft.AgendaText" @bind:event="oninput"></textarea>
+                    <div style="font-size:11px;color:var(--metin-3);margin-top:4px">
+                        Etkinliğin detayını görebilen herkes gündemi de görür.
+                    </div>
+                </div>
+
+                <div>
+                    <label class="etiket" for="olay-ozel-not">Özel notlar</label>
+                    <textarea id="olay-ozel-not" class="alan" rows="3"
+                              placeholder="Yalnızca sizin göreceğiniz hazırlık notları"
+                              @bind="Draft.PrivateNotes" @bind:event="oninput"></textarea>
+                    <div style="font-size:11px;color:var(--metin-3);margin-top:4px">
+                        🔒 Davetliler bunu görmez; yalnızca etkinliği düzenleyebilenler görür.
+                        Dışa aktarmaya ve CalDAV eşitlemesine de dahil edilmez.
+                    </div>
+                </div>
+            </div>
+        </details>
 
     </div>
 
@@ -337,6 +396,45 @@
     [Parameter] public EventCallback OnResetResponses { get; set; }
 
     private List<string> _problems = [];
+
+    private bool _previewDescription;
+
+    /// <summary>Bir biçimlendirme düğmesi: seçili metni sarar ya da satır başına ek koyar.</summary>
+    private sealed record FormatTool(string Label, string Title, string Marker, bool IsLinePrefix = false);
+
+    private static readonly FormatTool[] Tools =
+    [
+        new("<b>K</b>", "Kalın (**metin**)", "**"),
+        new("<i>E</i>", "Eğik (*metin*)", "*"),
+        new("<s>Ç</s>", "Üstü çizili (~~metin~~)", "~~"),
+        new("•", "Madde listesi", "- ", IsLinePrefix: true),
+        new("1.", "Numaralı liste", "1. ", IsLinePrefix: true),
+        new("H", "Başlık", "## ", IsLinePrefix: true),
+    ];
+
+    private bool HasAgendaOrNotes
+        => !string.IsNullOrWhiteSpace(Draft.AgendaText) || !string.IsNullOrWhiteSpace(Draft.PrivateNotes);
+
+    /// <summary>
+    /// Biçim işaretini metnin sonuna ekler. İmleç konumunu okumak için JS gerekirdi;
+    /// bunun yerine örnek bir kalıp eklenir, kullanıcı içine yazar.
+    /// </summary>
+    private void ApplyFormat(FormatTool tool)
+    {
+        _previewDescription = false;
+
+        var current = Draft.DescriptionHtml ?? string.Empty;
+
+        if (tool.IsLinePrefix)
+        {
+            // Satır ortasındaysak yeni satıra geçilir; liste imi satır başında olmalı.
+            if (current.Length > 0 && !current.EndsWith('\n')) current += '\n';
+            Draft.DescriptionHtml = current + tool.Marker;
+            return;
+        }
+
+        Draft.DescriptionHtml = current + tool.Marker + "metin" + tool.Marker;
+    }
 
     private static readonly string[] Palette =
         ["tomato", "flamingo", "tangerine", "banana", "sage", "basil",

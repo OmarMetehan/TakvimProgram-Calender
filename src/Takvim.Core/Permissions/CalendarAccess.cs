@@ -78,8 +78,15 @@ public readonly record struct EventAccess(DetailLevel Detail, bool CanEdit, bool
     /// <summary>Başlık gösterilebilir mi.</summary>
     public bool CanSeeTitle => Detail >= DetailLevel.TitleLocation;
 
-    /// <summary>Açıklama, katılımcılar ve ekler gösterilebilir mi.</summary>
+    /// <summary>Açıklama, gündem, katılımcılar ve ekler gösterilebilir mi.</summary>
     public bool CanSeeDetails => Detail == DetailLevel.FullDetails;
+
+    /// <summary>
+    /// Organizatörün kendine aldığı özel notlar gösterilebilir mi. Detay
+    /// seviyesinden bağımsızdır: davetli tüm detayı görür ama bu notu görmez.
+    /// Düzenleyebilen görebilir — zaten alanı değiştirebilecek durumdadır.
+    /// </summary>
+    public bool CanSeePrivateNotes => CanEdit;
 
     public static readonly EventAccess Hidden = new(DetailLevel.None, false, false);
 }

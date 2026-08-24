@@ -15,6 +15,12 @@ namespace Takvim.Core.Domain;
 /// </summary>
 public class Event
 {
+    /// <summary>
+    /// Alanları aynı olan yeni bir nesne. İzin katmanı tek bir alanı gizlemek
+    /// için kaynağı değiştiremez — izlenen varlığı bozar — bu yüzden kopya alır.
+    /// </summary>
+    public Event ShallowCopy() => (Event)MemberwiseClone();
+
     public Guid Id { get; set; } = Guid.CreateVersion7();
 
     public Guid CalendarId { get; set; }
@@ -68,8 +74,25 @@ public class Event
 
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>Zengin metin açıklama; arındırılmış HTML olarak saklanır.</summary>
+    /// <summary>
+    /// Açıklama. Biçimlendirilmiş <b>düz metin</b> olarak saklanır; HTML'e
+    /// gösterim anında <see cref="Text.RichText"/> ile çevrilir. Alan adı,
+    /// ICS'teki karşılığıyla (DESCRIPTION) uyum için korunmuştur.
+    /// </summary>
     public string? DescriptionHtml { get; set; }
+
+    /// <summary>
+    /// Toplantı gündemi. Açıklamadan ayrı tutulur: açıklama davetin metni,
+    /// gündem ise toplantıda konuşulacak maddelerdir. Detayı görebilen herkes
+    /// görür.
+    /// </summary>
+    public string? AgendaText { get; set; }
+
+    /// <summary>
+    /// Yalnızca etkinliği düzenleyebilenlerin gördüğü notlar. Davetli tüm
+    /// detayı görse bile bunu görmez; organizatörün kendine aldığı nottur.
+    /// </summary>
+    public string? PrivateNotes { get; set; }
 
     public string? LocationText { get; set; }
 

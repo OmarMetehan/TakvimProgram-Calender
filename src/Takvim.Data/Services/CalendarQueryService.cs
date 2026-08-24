@@ -290,9 +290,20 @@ public sealed class CalendarQueryService(
 
         var access = CalendarAccess.Resolve(context, facts);
 
-        if (access.IsHidden || access.CanSeeDetails)
+        if (access.IsHidden) return occurrence with { Access = access };
+
+        if (access.CanSeeDetails)
         {
-            return occurrence with { Access = access };
+            // Tüm detayı görene tek istisna özel notlardır.
+            if (access.CanSeePrivateNotes || source.PrivateNotes is null)
+            {
+                return occurrence with { Access = access };
+            }
+
+            var withoutNotes = source.ShallowCopy();
+            withoutNotes.PrivateNotes = null;
+
+            return occurrence with { Access = access, Source = withoutNotes };
         }
 
         // Kısıtlı örnek: kaynağı karartılmış bir kopyayla değiştiririz. Böylece
@@ -325,8 +336,11 @@ public sealed class CalendarQueryService(
         Title = CalendarAccess.TitleFor(access, source.Title),
         LocationText = CalendarAccess.LocationFor(access, source.LocationText),
 
-        // Açıklama, bağlantı, renk, kategori ve katılımcılar hiç taşınmaz.
+        // Açıklama, gündem, notlar, bağlantı, renk, kategori ve katılımcılar
+        // hiç taşınmaz.
         DescriptionHtml = null,
+        AgendaText = null,
+        PrivateNotes = null,
         OnlineMeetingUrl = null,
         OnlineMeetingProvider = null,
         Color = null,

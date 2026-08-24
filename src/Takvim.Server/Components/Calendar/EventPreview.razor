@@ -149,11 +149,29 @@
         </div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(Description) && Occurrence.CanSeeDetails)
+    @if (!string.IsNullOrWhiteSpace(Occurrence.Source.DescriptionHtml) && Occurrence.CanSeeDetails)
     {
         <div class="onizleme__satir" style="max-height:120px;overflow-y:auto">
             <span aria-hidden="true">☰</span>
-            <span style="white-space:pre-wrap">@Description</span>
+            @* Metin kullanıcıdan düz gelir; HTML'i RichText üretir, kaçışlama orada yapılır. *@
+            <span class="zengin-metin">@((MarkupString)RichText.ToHtml(Occurrence.Source.DescriptionHtml))</span>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Occurrence.Source.AgendaText) && Occurrence.CanSeeDetails)
+    {
+        <div class="onizleme__satir" style="max-height:120px;overflow-y:auto">
+            <span aria-hidden="true" title="Gündem">📋</span>
+            <span class="zengin-metin">@((MarkupString)RichText.ToHtml(Occurrence.Source.AgendaText))</span>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Occurrence.Source.PrivateNotes))
+    {
+        @* Sorgu katmanı bu alanı görmemesi gerekene zaten null yapar. *@
+        <div class="onizleme__satir" style="max-height:120px;overflow-y:auto">
+            <span aria-hidden="true" title="Yalnızca size görünür">🔒</span>
+            <span class="zengin-metin">@((MarkupString)RichText.ToHtml(Occurrence.Source.PrivateNotes))</span>
         </div>
     }
 
@@ -223,7 +241,6 @@
 
     private List<Reminder> Reminders => [.. Occurrence.Source.Reminders.OrderByDescending(r => r.MinutesBefore)];
 
-    private string Description => Takvim.Core.Text.TurkishText.StripHtml(Occurrence.Source.DescriptionHtml).Trim();
 
     private string RecurrenceText
     {

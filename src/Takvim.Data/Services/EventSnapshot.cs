@@ -36,6 +36,8 @@ public sealed record EventSnapshot
 
     public string Title { get; init; } = "";
     public string? DescriptionHtml { get; init; }
+    public string? AgendaText { get; init; }
+    public string? PrivateNotes { get; init; }
     public string? LocationText { get; init; }
     public string? OnlineMeetingUrl { get; init; }
     public string? OnlineMeetingProvider { get; init; }
@@ -88,6 +90,8 @@ public sealed record EventSnapshot
             EndUtc = InstantPatternUtc.Format(ev.EndUtc),
             Title = ev.Title,
             DescriptionHtml = ev.DescriptionHtml,
+            AgendaText = ev.AgendaText,
+            PrivateNotes = ev.PrivateNotes,
             LocationText = ev.LocationText,
             OnlineMeetingUrl = ev.OnlineMeetingUrl,
             OnlineMeetingProvider = ev.OnlineMeetingProvider,
@@ -135,6 +139,8 @@ public sealed record EventSnapshot
         ev.EndUtc = InstantPatternUtc.Parse(EndUtc).Value;
         ev.Title = Title;
         ev.DescriptionHtml = DescriptionHtml;
+        ev.AgendaText = AgendaText;
+        ev.PrivateNotes = PrivateNotes;
         ev.LocationText = LocationText;
         ev.OnlineMeetingUrl = OnlineMeetingUrl;
         ev.OnlineMeetingProvider = OnlineMeetingProvider;

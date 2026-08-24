@@ -34,6 +34,9 @@ public sealed class IcsSerializer(TimeZoneService timeZones)
     /// <summary>Meşguliyet durumunu ICS'e taşıyan özel alan; standart TRANSP bunu ifade edemez.</summary>
     private const string AvailabilityProperty = "X-TAKVIM-AVAILABILITY";
 
+    /// <summary>Gündem standartta yok; kendi alanımızla taşınır. Özel notlar hiç taşınmaz.</summary>
+    private const string AgendaProperty = "X-TAKVIM-AGENDA";
+
     // ==================================================================
     // Dışa aktarma
     // ==================================================================
@@ -100,6 +103,10 @@ public sealed class IcsSerializer(TimeZoneService timeZones)
         // Meşgul/Ofis dışı/Odaklanma ayrımı standartta yoktur; kendi alanımızla taşınır.
         if (ev.Availability is not (Availability.Busy or Availability.Free))
             calendarEvent.AddProperty(AvailabilityProperty, ev.Availability.ToString().ToUpperInvariant());
+
+        // Özel notlar bilerek dışarı verilmez: adı üstünde, yalnızca sahibinindir.
+        if (!string.IsNullOrWhiteSpace(ev.AgendaText))
+            calendarEvent.AddProperty(AgendaProperty, ev.AgendaText);
 
         if (!string.IsNullOrWhiteSpace(ev.RecurrenceRule))
             calendarEvent.RecurrenceRule = new RecurrencePattern(ev.RecurrenceRule);
@@ -204,6 +211,7 @@ public sealed class IcsSerializer(TimeZoneService timeZones)
             ETag = Guid.NewGuid().ToString("N")[..16],
             Title = source.Summary ?? "(başlıksız)",
             DescriptionHtml = source.Description,
+            AgendaText = source.Properties[AgendaProperty]?.Value?.ToString(),
             LocationText = source.Location,
             IsAllDay = isAllDay,
             StartLocal = startLocal,
@@ -249,7 +257,8 @@ public sealed class IcsSerializer(TimeZoneService timeZones)
         ev.StartUtc = timeZones.ToInstant(ev.StartLocal, ev.StartTimeZoneId ?? startZone);
         ev.EndUtc = timeZones.ToInstant(ev.EndLocal, ev.EndTimeZoneId ?? endZone);
         ev.LastModifiedUtc = ev.StartUtc;
-        ev.SearchText = Text.TurkishText.BuildSearchText(ev.Title, ev.DescriptionHtml, ev.LocationText);
+        ev.SearchText = Text.TurkishText.BuildSearchText(
+            ev.Title, ev.DescriptionHtml, ev.AgendaText, ev.LocationText);
 
         return ev;
     }
