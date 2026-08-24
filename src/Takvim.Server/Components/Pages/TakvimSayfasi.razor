@@ -498,6 +498,8 @@
 
     private async Task SaveDraft(EventDraft draft)
     {
+        await RememberLocationAsync(draft.LocationText);
+
         if (draft.IsNew)
         {
             await RunWrite(async events =>
@@ -539,6 +541,20 @@
         }, "Etkinlik güncellendi.");
 
         CloseAll();
+    }
+
+    /// <summary>
+    /// Kullanılan konumu öneri listesine düşürür. Kaydetmenin yan işidir:
+    /// başarısız olsa bile etkinliğin kaydedilmiş olmasını geçersiz kılmaz.
+    /// </summary>
+    private async Task RememberLocationAsync(string? locationText)
+    {
+        if (string.IsNullOrWhiteSpace(locationText)) return;
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var locations = scope.ServiceProvider.GetRequiredService<LocationService>();
+
+        await locations.RecordAsync(State.ActiveUserId, locationText);
     }
 
     /// <summary>

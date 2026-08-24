@@ -89,6 +89,7 @@ public static class TakvimHost
         builder.Services.AddScoped<AppPasswordService>();
         builder.Services.AddScoped<CalDavStore>();
         builder.Services.AddScoped<AttachmentService>();
+        builder.Services.AddScoped<LocationService>();
         builder.Services.AddScoped<CalendarBootstrapper>();
 
         // Hatırlatıcı zamanlayıcısı uygulama ömrü boyunca tek örnektir; sonucu

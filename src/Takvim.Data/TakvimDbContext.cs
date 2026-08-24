@@ -20,6 +20,7 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<CalendarShare> CalendarShares => Set<CalendarShare>();
     public DbSet<AppPassword> AppPasswords => Set<AppPassword>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
+    public DbSet<SavedLocation> SavedLocations => Set<SavedLocation>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -143,6 +144,21 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<SavedLocation>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.Text).HasMaxLength(1000);
+            e.Property(x => x.NormalizedText).HasMaxLength(1000);
+
+            e.HasOne<User>().WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+            // Aynı konum bir kullanıcıda iki kez tutulmaz; kayıt yolu bu indekse
+            // dayanarak "varsa artır, yoksa ekle" yapar.
+            e.HasIndex(x => new { x.UserId, x.NormalizedText }).IsUnique();
         });
 
         modelBuilder.Entity<Attachment>(e =>

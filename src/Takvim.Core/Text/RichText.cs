@@ -154,7 +154,7 @@ public static class RichText
 
     private enum LineKind { Text, Bullet, Numbered, Heading1, Heading2, Heading3, Quote }
 
-    private static IEnumerable<string> Lines(string source)
+    private static string[] Lines(string source)
         => source.Replace("\r\n", "\n", StringComparison.Ordinal)
                  .Replace('\r', '\n')
                  .Split('\n');

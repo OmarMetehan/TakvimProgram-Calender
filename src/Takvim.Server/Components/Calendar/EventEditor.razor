@@ -164,15 +164,47 @@
 
         <div>
             <label class="etiket" for="olay-konum">Konum</label>
-            <input id="olay-konum" class="alan" placeholder="Oda, adres veya serbest metin"
-                   @bind="Draft.LocationText" @bind:event="oninput" />
+
+            <div style="display:flex;gap:6px">
+                <input id="olay-konum" class="alan" placeholder="Oda, adres veya serbest metin"
+                       list="kayitli-konumlar" autocomplete="off"
+                       @bind="Draft.LocationText" @bind:event="oninput" />
+
+                @if (MeetingLinks.MapSearchUrl(Draft.LocationText) is { } mapUrl)
+                {
+                    <a class="dugme dugme--simge" href="@mapUrl" target="_blank" rel="noopener noreferrer"
+                       title="Haritada aç" aria-label="Konumu haritada aç">🗺</a>
+                }
+            </div>
+
+            @* Yazarken çıkan öneriler: daha önce kullanılan konumlar. *@
+            <datalist id="kayitli-konumlar">
+                @foreach (var location in _savedLocations)
+                {
+                    <option value="@location.Text"></option>
+                }
+            </datalist>
+
+            @if (_savedLocations.Count > 0 && string.IsNullOrWhiteSpace(Draft.LocationText))
+            {
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">
+                    @foreach (var location in _savedLocations.Take(4))
+                    {
+                        <button type="button" class="rozet" style="border:1px solid var(--cizgi)"
+                                title="@(location.IsPinned ? "Sabitlenmiş konum" : $"{location.UseCount} kez kullanıldı")"
+                                @onclick="() => Draft.LocationText = location.Text">
+                            @(location.IsPinned ? "📌 " : "")@location.Text
+                        </button>
+                    }
+                </div>
+            }
         </div>
 
         <div>
             <label class="etiket" for="olay-baglanti">Çevrimiçi toplantı</label>
             <div style="display:flex;gap:6px">
                 <input id="olay-baglanti" class="alan" placeholder="https://…"
-                       @bind="Draft.OnlineMeetingUrl" @bind:event="oninput" />
+                       value="@Draft.OnlineMeetingUrl" @onchange="OnMeetingUrlChanged" @oninput="OnMeetingUrlChanged" />
                 <select class="alan" style="width:112px" @bind="Draft.OnlineMeetingProvider"
                         aria-label="Toplantı sağlayıcısı">
                     <option value="">Sağlayıcı</option>
@@ -180,9 +212,41 @@
                     <option value="meet">Meet</option>
                     <option value="zoom">Zoom</option>
                     <option value="webex">Webex</option>
+                    <option value="jitsi">Jitsi</option>
+                    <option value="whereby">Whereby</option>
                     <option value="diger">Diğer</option>
                 </select>
             </div>
+
+            @if (string.IsNullOrWhiteSpace(Draft.OnlineMeetingUrl))
+            {
+                <button type="button" class="dugme dugme--sade" style="margin-top:5px"
+                        @onclick="CreateMeetingLink">
+                    ✨ Toplantı bağlantısı oluştur
+                </button>
+
+                <div style="font-size:11px;color:var(--metin-3);margin-top:4px">
+                    Hesap gerektirmeyen bir Jitsi Meet odası açar. Teams, Zoom ve Meet
+                    bağlantıları o uygulamalardan alınıp buraya yapıştırılır;
+                    sağlayıcıları kendiliğinden tanınır.
+                </div>
+            }
+            else
+            {
+                <div style="display:flex;gap:6px;align-items:center;margin-top:5px">
+                    <a class="dugme dugme--sade" href="@Draft.OnlineMeetingUrl"
+                       target="_blank" rel="noopener noreferrer">Bağlantıyı aç</a>
+
+                    <button type="button" class="dugme dugme--sade"
+                            @onclick="() => { Draft.OnlineMeetingUrl = null; Draft.OnlineMeetingProvider = null; }">
+                        Kaldır
+                    </button>
+
+                    <span style="font-size:11px;color:var(--metin-3)">
+                        @MeetingLinks.ProviderName(Draft.OnlineMeetingProvider)
+                    </span>
+                </div>
+            }
         </div>
 
         @* ---------- Renk ve kategoriler ---------- *@
@@ -395,9 +459,38 @@
     /// <summary>Organizatör tüm yanıtları sıfırlayıp yeniden sormak istediğinde.</summary>
     [Parameter] public EventCallback OnResetResponses { get; set; }
 
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
     private List<string> _problems = [];
 
     private bool _previewDescription;
+
+    private List<SavedLocation> _savedLocations = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var locations = scope.ServiceProvider.GetRequiredService<LocationService>();
+
+        _savedLocations = await locations.SuggestAsync(State.ActiveUserId);
+    }
+
+    /// <summary>Yapıştırılan adresten sağlayıcıyı tanır; kullanıcı elle değiştirebilir.</summary>
+    private void OnMeetingUrlChanged(ChangeEventArgs e)
+    {
+        Draft.OnlineMeetingUrl = e.Value?.ToString();
+
+        if (MeetingLinks.DetectProvider(Draft.OnlineMeetingUrl) is { } provider)
+        {
+            Draft.OnlineMeetingProvider = provider;
+        }
+    }
+
+    private void CreateMeetingLink()
+    {
+        Draft.OnlineMeetingUrl = MeetingLinks.CreateJitsiUrl(Draft.Title);
+        Draft.OnlineMeetingProvider = "jitsi";
+    }
 
     /// <summary>Bir biçimlendirme düğmesi: seçili metni sarar ya da satır başına ek koyar.</summary>
     private sealed record FormatTool(string Label, string Title, string Marker, bool IsLinePrefix = false);

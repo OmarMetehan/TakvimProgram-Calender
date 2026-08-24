@@ -56,7 +56,13 @@
     {
         <div class="onizleme__satir">
             <span aria-hidden="true">📍</span>
-            <span>@Occurrence.DisplayLocation</span>
+            <span style="flex:1">@Occurrence.DisplayLocation</span>
+
+            @if (MeetingLinks.MapSearchUrl(Occurrence.DisplayLocation) is { } mapUrl)
+            {
+                <a href="@mapUrl" target="_blank" rel="noopener noreferrer"
+                   title="Haritada aç" aria-label="Konumu haritada aç">🗺</a>
+            }
         </div>
     }
 
@@ -65,7 +71,7 @@
         <div class="onizleme__satir">
             <span aria-hidden="true">🔗</span>
             <a href="@Occurrence.Source.OnlineMeetingUrl" target="_blank" rel="noopener noreferrer">
-                Toplantıya katıl
+                @MeetingLinks.ProviderName(Occurrence.Source.OnlineMeetingProvider) ile katıl
             </a>
         </div>
     }
