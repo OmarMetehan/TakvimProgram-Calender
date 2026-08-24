@@ -1497,3 +1497,26 @@ kbd {
     padding: 8px 10px;
     font-size: 13px;
 }
+
+/* Etkinlik ekleri */
+.ek-satiri {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px;
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak-s);
+    margin-bottom: 5px;
+}
+
+.ek-adi {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--birincil);
+}
+
+.ek-adi:hover { text-decoration: underline; }

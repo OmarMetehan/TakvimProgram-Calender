@@ -106,6 +106,27 @@ window.takvim = (function () {
             setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
         },
 
+        /**
+         * İkili bir dosyayı base64'ten çözüp indirir. Ekler bu yolla gelir:
+         * uygulama gömülü çalıştığı için ayrı bir indirme uç noktası yok.
+         */
+        downloadBase64: function (fileName, base64, mimeType) {
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+            const url = URL.createObjectURL(new Blob([bytes], { type: mimeType || 'application/octet-stream' }));
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        },
+
         /** Seçilen dosyanın metnini okur; ICS içe aktarma bunu kullanır. */
         readFileText: async function (inputElement) {
             if (!inputElement || !inputElement.files || inputElement.files.length === 0) return null;

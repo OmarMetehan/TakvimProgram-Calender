@@ -107,6 +107,10 @@
         {
             var events = scope.ServiceProvider.GetRequiredService<EventService>();
             removed = await events.PurgeTrashAsync();
+
+            // Etkinlik gidince ek kayıtları da gider ama dosyalar diskte kalır;
+            // tek toplandıkları yer burası.
+            await scope.ServiceProvider.GetRequiredService<AttachmentService>().PurgeOrphansAsync();
         }
 
         await LoadAsync();

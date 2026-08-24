@@ -19,6 +19,7 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<Attendee> Attendees => Set<Attendee>();
     public DbSet<CalendarShare> CalendarShares => Set<CalendarShare>();
     public DbSet<AppPassword> AppPasswords => Set<AppPassword>();
+    public DbSet<Attachment> Attachments => Set<Attachment>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -140,6 +141,23 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<Attachment>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.FileName).HasMaxLength(260);
+            e.Property(x => x.ContentType).HasMaxLength(160);
+            e.Property(x => x.StorageName).HasMaxLength(80);
+            e.Ignore(x => x.SizeText);
+            e.Ignore(x => x.Icon);
+
+            e.HasOne(x => x.Event).WithMany(x => x.Attachments)
+                .HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.EventId);
+            // Yetim dosya temizliği bu sütunu tarar.
+            e.HasIndex(x => x.StorageName).IsUnique();
         });
 
         modelBuilder.Entity<AppPassword>(e =>

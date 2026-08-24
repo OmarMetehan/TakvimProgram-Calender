@@ -1,0 +1,169 @@
+@* Etkinlik ekleri: yükleme, listeleme, indirme, kaldırma. *@
+
+<div>
+    <span class="etiket">
+        Ekler
+        @if (_attachments.Count > 0)
+        {
+            <span style="font-weight:400;color:var(--metin-3)">
+                · @_attachments.Count dosya, @Attachment.FormatSize(_attachments.Sum(a => a.SizeBytes))
+            </span>
+        }
+    </span>
+
+    @if (EventId is null)
+    {
+        <div style="font-size:12px;color:var(--metin-3)">
+            Dosya eklemek için önce etkinliği kaydedin.
+        </div>
+    }
+    else
+    {
+        @foreach (var attachment in _attachments)
+        {
+            <div class="ek-satiri">
+                <span aria-hidden="true" style="font-size:18px">@attachment.Icon</span>
+
+                <button type="button" class="ek-adi" title="İndir: @attachment.FileName"
+                        @onclick="() => Download(attachment)">
+                    @attachment.FileName
+                    <span style="display:block;font-size:11px;color:var(--metin-3)">
+                        @attachment.SizeText
+                    </span>
+                </button>
+
+                <button class="dugme dugme--simge dugme--tehlike" title="Kaldır"
+                        aria-label="@attachment.FileName ekini kaldır"
+                        @onclick="() => Remove(attachment.Id)">✕</button>
+            </div>
+        }
+
+        @if (_error is { } error)
+        {
+            <div role="alert" style="color:var(--tehlike);font-size:12px;margin:4px 0">@error</div>
+        }
+
+        @if (_attachments.Count < AttachmentService.MaxPerEvent)
+        {
+            <InputFile class="alan" style="padding:6px;margin-top:6px"
+                       OnChange="OnFilesSelected" multiple disabled="@_working" />
+
+            <div style="font-size:11px;color:var(--metin-3);margin-top:4px">
+                Dosya başına en fazla @Attachment.FormatSize(AttachmentService.MaxFileBytes).
+                Çalıştırılabilir dosyalar kabul edilmez.
+            </div>
+        }
+        else
+        {
+            <div style="font-size:12px;color:var(--uyari)">
+                Ek sınırına ulaşıldı (@AttachmentService.MaxPerEvent dosya).
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+    [Inject] public required IJSRuntime Js { get; set; }
+
+    /// <summary>Ekleri gösterilecek etkinlik. Kaydedilmemiş taslakta null.</summary>
+    [Parameter] public Guid? EventId { get; set; }
+
+    private List<Attachment> _attachments = [];
+    private string? _error;
+    private bool _working;
+
+    private Guid? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (EventId == _loadedFor) return;
+
+        _loadedFor = EventId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (EventId is not { } eventId)
+        {
+            _attachments = [];
+            return;
+        }
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<AttachmentService>();
+
+        _attachments = await service.GetAsync(eventId);
+    }
+
+    private async Task OnFilesSelected(InputFileChangeEventArgs e)
+    {
+        if (EventId is not { } eventId) return;
+
+        _error = null;
+        _working = true;
+
+        try
+        {
+            // Birden çok dosya seçilebilir; ilk hata kalanları durdurmaz,
+            // yalnızca bildirilir.
+            foreach (var file in e.GetMultipleFiles(AttachmentService.MaxPerEvent))
+            {
+                await using var scope = Scopes.CreateAsyncScope();
+                var service = scope.ServiceProvider.GetRequiredService<AttachmentService>();
+
+                await using var stream = file.OpenReadStream(AttachmentService.MaxFileBytes);
+
+                var result = await service.AddAsync(
+                    eventId, file.Name, file.ContentType, stream, State.ActiveUserId);
+
+                if (!result.Success) _error = result.Error;
+            }
+        }
+        catch (IOException ex)
+        {
+            _error = "Dosya okunamadı: " + ex.Message;
+        }
+        finally
+        {
+            _working = false;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task Download(Attachment attachment)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<AttachmentService>();
+
+        var opened = await service.OpenAsync(attachment.Id);
+
+        if (opened is not { } found)
+        {
+            _error = "Dosya diskte bulunamadı.";
+            return;
+        }
+
+        // Base64'e çevirip tarayıcıya indirtiyoruz: uygulama gömülü çalıştığı
+        // için ayrı bir indirme uç noktası açmaya gerek yok.
+        var bytes = await File.ReadAllBytesAsync(found.Path);
+
+        await Js.InvokeVoidAsync("takvim.downloadBase64",
+            found.Record.FileName, Convert.ToBase64String(bytes), found.Record.ContentType);
+    }
+
+    private async Task Remove(Guid attachmentId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<AttachmentService>();
+            await service.RemoveAsync(attachmentId);
+        }
+
+        await LoadAsync();
+    }
+}

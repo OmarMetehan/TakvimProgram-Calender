@@ -182,4 +182,5 @@ public class Event
     public ICollection<Reminder> Reminders { get; set; } = [];
     public ICollection<EventCategory> Categories { get; set; } = [];
     public ICollection<Attendee> Attendees { get; set; } = [];
+    public ICollection<Attachment> Attachments { get; set; } = [];
 }
