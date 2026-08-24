@@ -1424,3 +1424,16 @@ kbd {
     background: color-mix(in srgb, var(--uyari) 18%, transparent);
     color: var(--uyari);
 }
+
+/* CalDAV panelinde kopyalanacak değerler */
+.dav-kutu {
+    display: block;
+    padding: 8px 10px;
+    background: var(--zemin-3);
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak-s);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 13px;
+    word-break: break-all;
+    user-select: all;
+}

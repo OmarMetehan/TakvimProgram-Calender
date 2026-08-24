@@ -1,0 +1,314 @@
+@* CalDAV sunucusu: açma/kapama, adres ve uygulama parolaları. *@
+@using Takvim.Server.CalDav
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel" style="width:min(600px, 100vw)" role="dialog" aria-modal="true"
+     aria-label="Cihaz senkronizasyonu">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Cihaz senkronizasyonu (CalDAV)</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        <p style="color:var(--metin-2);margin:0">
+            Açtığınızda iPhone, iPad, macOS Takvim ve Thunderbird bu takvime doğrudan
+            bağlanabilir. Bağlantı bu bilgisayarda kalır; hiçbir veri dışarı gitmez.
+        </p>
+
+        @* ---------------- Açma / kapama ---------------- *@
+        <section>
+            <label class="liste-ogesi" style="padding-left:0">
+                <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                       checked="@_enabled" @onchange="e => _enabled = (bool)(e.Value ?? false)" />
+                <span class="liste-ogesi__ad">
+                    <strong>CalDAV sunucusunu aç</strong>
+                    <span style="display:block;font-size:12px;color:var(--metin-3)">
+                        Kapalıyken hiçbir port açılmaz.
+                    </span>
+                </span>
+            </label>
+
+            @if (_enabled)
+            {
+                <div style="padding-left:24px;display:flex;flex-direction:column;gap:10px;margin-top:8px">
+
+                    <div>
+                        <span class="etiket">Erişim</span>
+                        <div class="secenek-listesi">
+                            <button type="button"
+                                    class="secenek @(_binding == CalDavBinding.Loopback ? "secenek--secili" : "")"
+                                    @onclick="() => _binding = CalDavBinding.Loopback">
+                                <span aria-hidden="true" style="font-size:16px">💻</span>
+                                <span style="flex:1">
+                                    <span class="secenek__ad">Yalnızca bu bilgisayar</span><br />
+                                    <span class="secenek__aciklama">
+                                        Aynı makinedeki Thunderbird bağlanabilir. Ağdan erişilemez.
+                                    </span>
+                                </span>
+                            </button>
+
+                            <button type="button"
+                                    class="secenek @(_binding == CalDavBinding.LocalNetwork ? "secenek--secili" : "")"
+                                    @onclick="() => _binding = CalDavBinding.LocalNetwork">
+                                <span aria-hidden="true" style="font-size:16px">📱</span>
+                                <span style="flex:1">
+                                    <span class="secenek__ad">Bu ağdaki cihazlar</span><br />
+                                    <span class="secenek__aciklama">
+                                        Telefon ve tablet bağlanabilir. Aynı ağdaki herkes adresi
+                                        görebilir; erişim yalnızca uygulama parolasıyla açılır.
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="etiket" for="dav-port">Port</label>
+                        <input id="dav-port" class="alan" type="number" style="width:130px"
+                               min="1024" max="65535"
+                               value="@_port"
+                               @onchange="OnPortChanged" />
+                        @if (_portError is { } portError)
+                        {
+                            <div role="alert" style="color:var(--tehlike);font-size:12px;margin-top:4px">
+                                @portError
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_changed)
+            {
+                <div class="oneri-kutusu" style="margin-top:10px">
+                    Değişiklikler <strong>uygulama yeniden başlatıldığında</strong> geçerli olur:
+                    dinlenecek adres, sunucu açılmadan önce belirlenir.
+                </div>
+            }
+
+            <button class="dugme dugme--birincil" style="margin-top:10px"
+                    disabled="@(!_changed || _portError is not null)"
+                    @onclick="SaveSettings">Ayarları kaydet</button>
+        </section>
+
+        @* ---------------- Bağlantı adresi ---------------- *@
+        @if (_saved.Enabled)
+        {
+            <hr style="border:none;border-top:1px solid var(--cizgi)" />
+
+            <section>
+                <h3 style="font-size:14px;margin:0 0 6px">Cihazınıza girilecek bilgiler</h3>
+
+                <div style="display:flex;flex-direction:column;gap:6px">
+                    <div>
+                        <span class="etiket">Sunucu adresi</span>
+                        <code class="dav-kutu">@_saved.ClientUrl(_hostName)</code>
+                    </div>
+                    <div>
+                        <span class="etiket">Kullanıcı adı</span>
+                        <code class="dav-kutu">@(State.ActiveUser?.Email ?? "")</code>
+                    </div>
+                    <div>
+                        <span class="etiket">Parola</span>
+                        <span style="color:var(--metin-2)">Aşağıdan bir uygulama parolası üretin.</span>
+                    </div>
+                </div>
+
+                @if (_saved.Binding == CalDavBinding.LocalNetwork)
+                {
+                    <div style="font-size:12px;color:var(--metin-2);margin-top:8px">
+                        <strong>@_hostName</strong> yerine bilgisayarınızın bu ağdaki IP adresini
+                        yazmanız gerekebilir. Windows'ta <code>ipconfig</code> komutuyla görebilirsiniz.
+                    </div>
+                }
+            </section>
+        }
+
+        @* ---------------- Uygulama parolaları ---------------- *@
+        <hr style="border:none;border-top:1px solid var(--cizgi)" />
+
+        <section>
+            <h3 style="font-size:14px;margin:0 0 4px">Uygulama parolaları</h3>
+            <p style="color:var(--metin-2);margin:0 0 10px">
+                Her cihaz için ayrı parola üretin. Cihaz kaybolursa yalnızca onun
+                parolasını iptal edersiniz, ötekiler çalışmaya devam eder.
+            </p>
+
+            @if (_issued is { } issued)
+            {
+                <div class="oneri-kutusu" style="border-color:var(--basari);background:color-mix(in srgb, var(--basari) 8%, transparent)">
+                    <div style="font-weight:600;margin-bottom:4px">"@issued.Record.Label" için parola</div>
+                    <code class="dav-kutu" style="font-size:16px;letter-spacing:.04em">@issued.PlainText</code>
+                    <div style="margin-top:6px">
+                        Bu parola <strong>bir daha gösterilmeyecek</strong>. Cihazınıza şimdi girin;
+                        kaybederseniz yenisini üretmeniz gerekir.
+                    </div>
+                    <button class="dugme dugme--sade" style="height:26px;margin-top:6px"
+                            @onclick="() => _issued = null">Anladım, gizle</button>
+                </div>
+            }
+
+            @foreach (var password in _passwords)
+            {
+                <div style="display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--cizgi);border-radius:var(--yuvarlak);margin-bottom:6px;@(password.IsActive ? "" : "opacity:.55")">
+                    <span aria-hidden="true" style="font-size:16px">@(password.IsActive ? "🔑" : "🚫")</span>
+
+                    <div style="flex:1;min-width:0">
+                        <div style="font-weight:500">@password.Label</div>
+                        <div style="font-size:12px;color:var(--metin-2)">
+                            @password.Prefix… ·
+                            @if (password.RevokedAt is not null)
+                            {
+                                <span>iptal edildi</span>
+                            }
+                            else if (password.LastUsedAt is { } used)
+                            {
+                                <span>son kullanım @TurkishFormat.Date(LocalDate.FromDateTime(used.LocalDateTime.Date))</span>
+                            }
+                            else
+                            {
+                                <span>henüz kullanılmadı</span>
+                            }
+                        </div>
+                    </div>
+
+                    @if (password.IsActive)
+                    {
+                        <button class="dugme dugme--tehlike" @onclick="() => Revoke(password.Id)">İptal et</button>
+                    }
+                </div>
+            }
+
+            <div style="display:flex;gap:6px;align-items:end;margin-top:8px">
+                <div style="flex:1">
+                    <label class="etiket" for="dav-etiket">Cihaz adı</label>
+                    <input id="dav-etiket" class="alan" placeholder="iPhone"
+                           @bind="_newLabel" @bind:event="oninput" />
+                </div>
+                <button class="dugme dugme--birincil"
+                        disabled="@string.IsNullOrWhiteSpace(_newLabel)"
+                        @onclick="Issue">Parola üret</button>
+            </div>
+        </section>
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+    [Inject] public required CalDavOptions Current { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private CalDavOptions _saved = new();
+    private bool _enabled;
+    private int _port;
+    private CalDavBinding _binding;
+    private string? _portError;
+
+    private List<AppPassword> _passwords = [];
+    private IssuedAppPassword? _issued;
+    private string _newLabel = "";
+
+    private readonly string _hostName = Environment.MachineName.ToLowerInvariant();
+
+    /// <summary>Kaydedilmemiş değişiklik var mı.</summary>
+    private bool _changed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Çalışan sunucunun ayarları tek örnek olarak enjekte edilir; dosyadaki
+        // hâli ise kaydedilmiş ama henüz uygulanmamış değişiklikleri de içerir.
+        _saved = Current;
+
+        var onDisk = CalDavOptions.Load();
+        _enabled = onDisk.Enabled;
+        _port = onDisk.Port;
+        _binding = onDisk.Binding;
+
+        await LoadPasswordsAsync();
+    }
+
+    protected override void OnParametersSet()
+        => _changed = _enabled != CalDavOptions.Load().Enabled
+                   || _port != CalDavOptions.Load().Port
+                   || _binding != CalDavOptions.Load().Binding;
+
+    private void OnPortChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var port))
+        {
+            _portError = "Geçerli bir port numarası girin.";
+            return;
+        }
+
+        if (!CalDavOptions.IsValidPort(port))
+        {
+            _portError = "Port 1024 ile 65535 arasında olmalı.";
+            return;
+        }
+
+        _portError = null;
+        _port = port;
+        MarkChanged();
+    }
+
+    private void MarkChanged()
+    {
+        var onDisk = CalDavOptions.Load();
+        _changed = _enabled != onDisk.Enabled || _port != onDisk.Port || _binding != onDisk.Binding;
+    }
+
+    private void SaveSettings()
+    {
+        if (_portError is not null) return;
+
+        new CalDavOptions { Enabled = _enabled, Port = _port, Binding = _binding }.Save();
+
+        _changed = false;
+        State.ShowStatus("CalDAV ayarları kaydedildi. Uygulamayı yeniden başlatın.");
+    }
+
+    private async Task LoadPasswordsAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<AppPasswordService>();
+
+        _passwords = await service.GetAsync(State.ActiveUserId);
+    }
+
+    private async Task Issue()
+    {
+        if (string.IsNullOrWhiteSpace(_newLabel)) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<AppPasswordService>();
+            _issued = await service.IssueAsync(State.ActiveUserId, _newLabel);
+        }
+
+        _newLabel = "";
+        await LoadPasswordsAsync();
+    }
+
+    private async Task Revoke(Guid passwordId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<AppPasswordService>();
+            await service.RevokeAsync(passwordId);
+        }
+
+        await LoadPasswordsAsync();
+        State.ShowStatus("Parola iptal edildi.");
+    }
+}

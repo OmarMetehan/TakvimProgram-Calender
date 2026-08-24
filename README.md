@@ -4,8 +4,8 @@ Outlook ve Google Takvim'in işlevlerini harmanlayan masaüstü takvim uygulamas
 
 Windows masaüstü uygulamasıdır: tek bir `Takvim.exe` açılır, içinde gömülü bir
 web sunucusu yerel adreste çalışır ve arayüz bir pencerede gösterilir. Kullanıcı
-için sıradan bir masaüstü programıdır; içeride ise Faz 2 ve 3'teki CalDAV sunucusu,
-REST API ve paylaşım özelliklerinin doğrudan üzerine kurulabileceği bir yapıdır.
+için sıradan bir masaüstü programıdır; içeride ise CalDAV sunucusu, paylaşım ve
+çok kullanıcılı toplantı yönetimi aynı sunucu üzerinde çalışır.
 
 ---
 
@@ -35,6 +35,7 @@ dotnet run --project src/Takvim.Server
 ```
 %LOCALAPPDATA%\Takvim\
 ├─ takvim.db      SQLite veritabanı
+├─ caldav.json    CalDAV sunucu ayarları (kapalıysa dosya oluşmaz)
 ├─ ekler\         etkinlik ekleri
 ├─ yedekler\      yedekler
 ├─ webview\       tarayıcı bileşeninin verileri
@@ -55,9 +56,10 @@ src/
 tests/
 ├─ Takvim.Core.Tests/   179 test — tekrarlama, zaman dilimi, ICS, ayrıştırıcı,
 │                       tatiller, izin motoru, müsaitlik hesabı
-└─ Takvim.Data.Tests/   122 test — seri düzenleme, silme, geri alma, hatırlatıcılar,
+└─ Takvim.Data.Tests/   184 test — seri düzenleme, silme, geri alma, hatırlatıcılar,
                         çalışma düzeni, zamanlama, paylaşım yalıtımı, RSVP,
-                        taşınan toplantıda eskiyen yanıtlar
+                        eskiyen yanıtlar, paylaşım denetimi, uygulama parolaları,
+                        CalDAV kaynak yönetimi
 ```
 
 Veri katmanı testleri gerçek SQLite üzerinde çalışır (bellek içi dosya), EF Core'un
@@ -119,8 +121,39 @@ başlığı okusa bile gizli veri sızmaz. Bu davranış testlerle korunur.
 | Toplantı taşınınca yanıtların "eski saate göre" işaretlenmesi | ✅ |
 | Takvim paylaşımı, beş kademeli izin seviyesi | ✅ |
 | Vekil erişimi ve özel öğelerin vekilden gizlenmesi | ✅ |
-| CalDAV sunucusu | ⏸ |
+| CalDAV sunucusu | ✅ |
 | E-posta ile davet (iTIP) | ⏸ tasarım gereği yok |
+
+### Cihaz senkronizasyonu (CalDAV)
+
+iPhone, iPad, macOS Takvim ve Thunderbird bu takvime doğrudan bağlanabilir.
+Kenar çubuğu → **Cihaz senkronizasyonu**.
+
+**Varsayılan olarak kapalıdır** ve kapalıyken hiçbir port açılmaz. Açarken iki
+seçenek var: *yalnızca bu bilgisayar* (127.0.0.1 — aynı makinedeki Thunderbird
+için) ya da *bu ağdaki cihazlar* (telefon için). Port sabittir (varsayılan 5232),
+çünkü istemciler adresi bir kez kaydeder.
+
+**Kimlik doğrulama zorunludur.** Kullanıcı adı e-posta, parola ise her cihaz için
+ayrı üretilen bir uygulama parolasıdır. Parolalar açık metin saklanmaz
+(PBKDF2-SHA256, 210.000 tur) ve üretildikleri an bir kez gösterilir. Cihaz
+kaybolursa yalnızca onun parolası iptal edilir.
+
+**CalDAV portundan arayüz görünmez.** Ağa açıldığında o porttan yalnızca `/dav`
+yolları yanıtlanır; arayüzün kendisi kimlik doğrulaması istemediği için o porta
+hiç çıkmaz.
+
+Desteklenen işlemler: `OPTIONS`, `PROPFIND` (keşif, takvim listesi, koleksiyon),
+`GET`, `PUT`, `DELETE`, ve `REPORT` altında `calendar-query`,
+`calendar-multiget`, `sync-collection`. Çakışma denetimi `If-Match` ile çalışır:
+iki istemci aynı anda düzenlerse biri sessizce ötekini ezmez.
+
+Bir CalDAV **kaynağı**, bir UID'ye ait *tüm* satırlardır: seri kökü ve
+RECURRENCE-ID taşıyan istisnaları tek `.ics` dosyasında birlikte bulunur.
+Kaynağın etiketi bu satırların hepsini kapsar — yalnızca kökünki kullanılsaydı,
+bir istisna değiştiğinde istemci fark etmezdi.
+
+Telefondan silinen etkinlik çöp kutusuna gider, kalıcı olarak silinmez.
 
 ### Toplantı taşınınca yanıtlara ne olur
 
@@ -188,7 +221,7 @@ davet ona ulaşmaz ve müsaitliği bilinemez; arayüz bunu açıkça belirtir.
   Sistem tepsisi, global kısayol ve Windows bildirimi masaüstü katmanının işidir;
   bu katman kapsam dışında bırakıldı.
 - **E-posta ve mobil bildirim kanalları.** Şema destekliyor, gönderim yok.
-- **Sessiz saatler.** Bildirim bölümünün geri kalanıyla birlikte Faz 2'de.
+- **Sessiz saatler.** Bildirim bölümünün geri kalanıyla birlikte yapılmadı.
 - **Zengin metin açıklama.** Şu an düz metin; alan HTML saklayacak biçimde tanımlı.
 - **Dosya ekleri.** Klasör ve yol hazır, arayüz yok.
 - **Katılımcı, oda, vekil tabloları.** Faz 2/3. `Event` üzerindeki ilgili sütunlar

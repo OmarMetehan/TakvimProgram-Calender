@@ -6,6 +6,7 @@ using Takvim.Core.Recurrence;
 using Takvim.Core.Time;
 using Takvim.Data;
 using Takvim.Data.Services;
+using Takvim.Server.CalDav;
 using Takvim.Server.Components;
 using Takvim.Server.State;
 
@@ -25,7 +26,32 @@ public static class TakvimHost
     {
         var builder = WebApplication.CreateBuilder(args ?? []);
 
-        if (!string.IsNullOrWhiteSpace(urls)) builder.WebHost.UseUrls(urls);
+        // CalDAV ayarları veritabanından önce okunur: hangi adresin dinleneceği
+        // uygulama açılmadan bilinmek zorunda.
+        var calDav = CalDavOptions.Load();
+
+        // Arayüz adresi: masaüstü kabuğu verirse o, yoksa yapılandırmadan gelen
+        // (launchSettings ya da ASPNETCORE_URLS). CalDAV açıksa ikinci bir
+        // dinleyici eklenir — arayüzünkinin yerine geçmez.
+        var addresses = new List<string>();
+
+        var uiAddress = !string.IsNullOrWhiteSpace(urls)
+            ? urls
+            : builder.Configuration["urls"] ?? builder.Configuration["ASPNETCORE_URLS"];
+
+        if (!string.IsNullOrWhiteSpace(uiAddress))
+        {
+            addresses.AddRange(uiAddress.Split(';', StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        if (calDav.Enabled && !addresses.Contains(calDav.ListenUrl, StringComparer.OrdinalIgnoreCase))
+        {
+            addresses.Add(calDav.ListenUrl);
+        }
+
+        if (addresses.Count > 0) builder.WebHost.UseUrls([.. addresses]);
+
+        builder.Services.AddSingleton(calDav);
 
         TakvimPaths.EnsureCreated();
 
@@ -58,6 +84,8 @@ public static class TakvimHost
         builder.Services.AddScoped<AttendeeService>();
         builder.Services.AddScoped<UserDirectory>();
         builder.Services.AddScoped<SharingService>();
+        builder.Services.AddScoped<AppPasswordService>();
+        builder.Services.AddScoped<CalDavStore>();
         builder.Services.AddScoped<CalendarBootstrapper>();
 
         // Hatırlatıcı zamanlayıcısı uygulama ömrü boyunca tek örnektir; sonucu
@@ -75,7 +103,18 @@ public static class TakvimHost
             app.UseExceptionHandler("/hata", createScopeForErrors: true);
         }
 
-        app.UseStatusCodePagesWithReExecute("/bulunamadi", createScopeForStatusCodePages: true);
+        // Sıra önemli: önce port yalıtımı (CalDAV portundan arayüz görünmesin),
+        // sonra kimlik doğrulama, sonra geri kalan her şey.
+        app.UseMiddleware<CalDavPortIsolation>();
+        app.UseMiddleware<CalDavAuthentication>();
+
+        // Durum kodu sayfaları yalnızca arayüz için. CalDAV yollarında devreye
+        // girerse 412 gibi anlamlı yanıtlar "/bulunamadi" sayfasında yeniden
+        // çalıştırılır ve o sayfa PUT kabul etmediği için 405'e dönüşür.
+        app.UseWhen(
+            context => !context.Request.Path.StartsWithSegments("/dav"),
+            branch => branch.UseStatusCodePagesWithReExecute(
+                "/bulunamadi", createScopeForStatusCodePages: true));
         app.UseAntiforgery();
 
         // Statik varlık bildirimi giriş derlemesinin adına göre aranır. Masaüstü
@@ -83,6 +122,7 @@ public static class TakvimHost
         // bildirim bulunamaz; bu yüzden dosya adı açıkça verilir.
         app.MapStaticAssets(StaticAssetsManifest);
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+        app.MapCalDav();
 
         return app;
     }

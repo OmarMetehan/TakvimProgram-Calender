@@ -21,7 +21,8 @@
                  OnOpenTrash="() => _panel = Panel.Trash"
                  OnOpenImportExport="() => _panel = Panel.ImportExport"
                  OnOpenShortcuts="() => _panel = Panel.Shortcuts"
-                 OnOpenWorkSchedule="() => OpenWorkSchedule(State.Today)" />
+                 OnOpenWorkSchedule="() => OpenWorkSchedule(State.Today)"
+                 OnOpenCalDav="() => _panel = Panel.CalDav" />
 
         <main class="icerik">
             @if (State.IsLoading)
@@ -105,6 +106,11 @@
         <PeoplePanel OnClose="CloseAll" />
     }
 
+    @if (_panel == Panel.CalDav)
+    {
+        <CalDavPanel OnClose="CloseAll" />
+    }
+
     @if (_panel == Panel.WorkSchedule)
     {
         <WorkScheduleDialog Date="_workScheduleDate" OnClose="CloseAll" />
@@ -136,7 +142,7 @@
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
     [Inject] public required IJSRuntime Js { get; set; }
 
-    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People }
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav }
 
     private Panel _panel = Panel.None;
 

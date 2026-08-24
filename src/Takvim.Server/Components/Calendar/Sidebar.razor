@@ -81,6 +81,11 @@
             <span class="liste-ogesi__ad">Çalışma düzeni</span>
         </button>
 
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenCalDav.InvokeAsync()">
+            <span aria-hidden="true">📲</span>
+            <span class="liste-ogesi__ad">Cihaz senkronizasyonu</span>
+        </button>
+
         <button type="button" class="liste-ogesi" @onclick="() => OnOpenShortcuts.InvokeAsync()">
             <span aria-hidden="true">⌨</span>
             <span class="liste-ogesi__ad">Klavye kısayolları</span>
@@ -98,6 +103,7 @@
     [Parameter] public EventCallback OnOpenImportExport { get; set; }
     [Parameter] public EventCallback OnOpenShortcuts { get; set; }
     [Parameter] public EventCallback OnOpenWorkSchedule { get; set; }
+    [Parameter] public EventCallback OnOpenCalDav { get; set; }
 
     private Task OnDateSelected(LocalDate date)
     {

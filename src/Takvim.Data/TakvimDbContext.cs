@@ -18,6 +18,7 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<WorkLocationEntry> WorkLocations => Set<WorkLocationEntry>();
     public DbSet<Attendee> Attendees => Set<Attendee>();
     public DbSet<CalendarShare> CalendarShares => Set<CalendarShare>();
+    public DbSet<AppPassword> AppPasswords => Set<AppPassword>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -139,6 +140,20 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<AppPassword>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Label).HasMaxLength(100);
+            e.Property(x => x.Prefix).HasMaxLength(8);
+            e.Ignore(x => x.IsActive);
+
+            e.HasOne(x => x.User).WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+            // Kimlik doğrulama, kullanıcının etkin parolalarını bu indeksle bulur.
+            e.HasIndex(x => new { x.UserId, x.RevokedAt });
         });
 
         modelBuilder.Entity<Attendee>(e =>
