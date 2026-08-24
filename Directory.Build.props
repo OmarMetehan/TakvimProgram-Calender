@@ -11,18 +11,6 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <!--
-    Smart App Control (Windows 11) imzasız derlemeleri karma değerine göre
-    engelleyebiliyor; engellenen bir karma, derleme deterministik olduğu için
-    aynı kaynaktan her seferinde yeniden üretiliyor ve "yeniden derle" işe
-    yaramıyordu. Hata ayıklama derlemelerinde determinizmi kapatmak her
-    derlemeye yeni bir kimlik verir, böylece engel bir sonraki derlemede geçer.
-    Yayın derlemesi deterministik kalır.
-  -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <Deterministic>false</Deterministic>
-  </PropertyGroup>
-
   <!-- Uygulama genelinde tek kültür: tarih/saat biçimleri Türkçe varsayılan -->
   <PropertyGroup>
     <NeutralLanguage>tr-TR</NeutralLanguage>

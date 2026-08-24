@@ -21,6 +21,7 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<AppPassword> AppPasswords => Set<AppPassword>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
     public DbSet<SavedLocation> SavedLocations => Set<SavedLocation>();
+    public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -144,6 +145,19 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<EventTemplate>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.Name).HasMaxLength(120);
+
+            e.HasOne<User>().WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+            // Aynı ad ikinci kez verildiğinde kastedilen şey güncellemektir.
+            e.HasIndex(x => new { x.UserId, x.Name }).IsUnique();
         });
 
         modelBuilder.Entity<SavedLocation>(e =>

@@ -1581,3 +1581,33 @@ kbd {
 }
 
 .zengin-metin del { color: var(--metin-3) }
+
+/* Şablon rozetleri: adına tıklamak uygular, ✕ siler */
+.sablon-rozeti {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak-s);
+    overflow: hidden;
+}
+
+.sablon-rozeti__ad,
+.sablon-rozeti__sil {
+    border: 0;
+    background: transparent;
+    color: var(--metin);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.sablon-rozeti__ad:hover { background: var(--yuzey-2) }
+
+.sablon-rozeti__sil {
+    color: var(--metin-3);
+    border-left: 1px solid var(--cizgi);
+    padding: 4px 6px;
+}
+
+.sablon-rozeti__sil:hover { background: var(--tehlike); color: #fff }

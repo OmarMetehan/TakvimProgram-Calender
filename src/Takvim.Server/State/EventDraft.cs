@@ -137,6 +137,94 @@ public sealed class EventDraft
         return draft;
     }
 
+    // ------------------------------------------------------------------
+    // Şablonlar
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Taslağın içeriğini şablona çevirir. Tarih ve saat taşınmaz — şablon
+    /// "şu içerikte, şu kadar süren bir etkinlik"tir, ne zaman olacağını
+    /// kullanan seçer. Toplantı bağlantısı da taşınmaz: her etkinlik kendi
+    /// odasını almalıdır.
+    /// </summary>
+    public EventTemplatePayload ToTemplate() => new()
+    {
+        Title = string.IsNullOrWhiteSpace(Title) ? null : Title.Trim(),
+        DescriptionHtml = DescriptionHtml,
+        AgendaText = AgendaText,
+        PrivateNotes = PrivateNotes,
+        LocationText = LocationText,
+        DurationMinutes = (int)Period.Between(Start, End, PeriodUnits.Minutes).Minutes,
+        IsAllDay = IsAllDay,
+        Color = Color,
+        RecurrenceRule = EffectiveRecurrenceRule,
+        Availability = Availability,
+        Visibility = Visibility,
+        HolidayBehavior = HolidayBehavior,
+        IsForwardable = IsForwardable,
+        OnlineMeetingProvider = OnlineMeetingProvider,
+        CategoryIds = [.. CategoryIds],
+        AttendeeUserIds = [.. Attendees.Where(a => a.UserId is not null).Select(a => a.UserId!.Value)],
+        ReminderMinutes = [.. Reminders.Select(r => r.MinutesBefore)],
+    };
+
+    /// <summary>
+    /// Şablonu taslağa uygular. Başlangıç <b>korunur</b>, bitiş şablonun
+    /// süresine göre yeniden hesaplanır: kullanıcı ızgarada bir saat seçip
+    /// şablonu uyguladığında seçtiği saatin kaybolmasını beklemez.
+    /// </summary>
+    /// <param name="knownUsers">Katılımcı kimliklerini ada çevirmek için kullanıcı defteri.</param>
+    public void ApplyTemplate(EventTemplatePayload template, IReadOnlyList<User> knownUsers)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        ArgumentNullException.ThrowIfNull(knownUsers);
+
+        Title = template.Title ?? Title;
+        DescriptionHtml = template.DescriptionHtml;
+        AgendaText = template.AgendaText;
+        PrivateNotes = template.PrivateNotes;
+        LocationText = template.LocationText;
+        Color = template.Color;
+        Availability = template.Availability;
+        Visibility = template.Visibility;
+        HolidayBehavior = template.HolidayBehavior;
+        IsForwardable = template.IsForwardable;
+        OnlineMeetingProvider = template.OnlineMeetingProvider;
+
+        // Sağlayıcı şablondan gelir, oda her seferinde yeniden üretilir.
+        OnlineMeetingUrl = template.OnlineMeetingProvider == "jitsi"
+            ? Takvim.Core.Scheduling.MeetingLinks.CreateJitsiUrl(Title)
+            : null;
+
+        CategoryIds = [.. template.CategoryIds];
+        Reminders = [.. template.ReminderMinutes.Select(m => new ReminderInput(m))];
+
+        Attendees =
+        [
+            .. knownUsers
+                .Where(u => template.AttendeeUserIds.Contains(u.Id))
+                .Select(u => new AttendeeDraft
+                {
+                    UserId = u.Id,
+                    Email = u.Email,
+                    DisplayName = u.DisplayName,
+                }),
+        ];
+
+        RecurrencePreset = template.RecurrenceRule is null
+            ? RecurrencePreset.None
+            : RecurrencePreset.Custom;
+        CustomRecurrenceRule = template.RecurrenceRule;
+
+        var start = Start;
+        IsAllDay = template.IsAllDay;
+
+        SetStart(start);
+        SetEnd(IsAllDay
+            ? start.Date.PlusDays(Math.Max(1, template.DurationMinutes / (24 * 60))).AtMidnight()
+            : start.PlusMinutes(Math.Max(1, template.DurationMinutes)));
+    }
+
     public void SetStart(LocalDateTime value)
     {
         StartDate = value.Date.ToString("uuuu-MM-dd", CultureInfo.InvariantCulture);

@@ -22,6 +22,27 @@
             </div>
         }
 
+        @if (Draft.IsNew && _templates.Count > 0)
+        {
+            <div>
+                <span class="etiket">Şablondan doldur</span>
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                    @foreach (var template in _templates)
+                    {
+                        <span class="sablon-rozeti">
+                            <button type="button" class="sablon-rozeti__ad"
+                                    title="@($"{template.Name} şablonunu uygula")"
+                                    @onclick="() => ApplyTemplate(template.Id)">@template.Name</button>
+
+                            <button type="button" class="sablon-rozeti__sil"
+                                    title="Şablonu sil" aria-label="@($"{template.Name} şablonunu sil")"
+                                    @onclick="() => DeleteTemplate(template.Id)">✕</button>
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+
         <div>
             <label class="etiket" for="olay-baslik">Başlık</label>
             <input id="olay-baslik" class="alan" placeholder="Etkinlik başlığı"
@@ -430,11 +451,29 @@
 
     </div>
 
+    @if (_namingTemplate)
+    {
+        <div class="panel__alt" style="gap:6px">
+            <input class="alan" style="flex:1" placeholder="Şablonun adı"
+                   aria-label="Şablonun adı" @bind="_templateName" @bind:event="oninput"
+                   @onkeydown="TemplateNameKey" />
+
+            <button class="dugme" @onclick="() => _namingTemplate = false">Vazgeç</button>
+            <button class="dugme dugme--birincil"
+                    disabled="@string.IsNullOrWhiteSpace(_templateName)"
+                    @onclick="SaveTemplate">Şablonu kaydet</button>
+        </div>
+    }
+
     <div class="panel__alt">
         @if (!Draft.IsNew)
         {
             <button class="dugme dugme--tehlike" @onclick="() => OnDelete.InvokeAsync()">Sil</button>
         }
+
+        <button class="dugme dugme--sade" title="Bu etkinliğin içeriğini şablon olarak sakla"
+                @onclick="BeginNamingTemplate">☆ Şablon</button>
+
         <span class="panel__bosluk"></span>
         <button class="dugme" @onclick="() => OnCancel.InvokeAsync()">Vazgeç</button>
         <button class="dugme dugme--birincil" @onclick="Save">Kaydet</button>
@@ -466,13 +505,79 @@
     private bool _previewDescription;
 
     private List<SavedLocation> _savedLocations = [];
+    private List<EventTemplate> _templates = [];
+
+    private bool _namingTemplate;
+    private string _templateName = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
         await using var scope = Scopes.CreateAsyncScope();
-        var locations = scope.ServiceProvider.GetRequiredService<LocationService>();
 
-        _savedLocations = await locations.SuggestAsync(State.ActiveUserId);
+        _savedLocations = await scope.ServiceProvider
+            .GetRequiredService<LocationService>().SuggestAsync(State.ActiveUserId);
+
+        _templates = await scope.ServiceProvider
+            .GetRequiredService<TemplateService>().GetAsync(State.ActiveUserId);
+    }
+
+    private async Task ApplyTemplate(Guid templateId)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+
+        var payload = await scope.ServiceProvider
+            .GetRequiredService<TemplateService>().UseAsync(templateId);
+
+        if (payload is null) return;
+
+        Draft.ApplyTemplate(payload, State.Users);
+        _problems = [];
+    }
+
+    private async Task DeleteTemplate(Guid templateId)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var templates = scope.ServiceProvider.GetRequiredService<TemplateService>();
+
+        await templates.DeleteAsync(templateId);
+        _templates = await templates.GetAsync(State.ActiveUserId);
+    }
+
+    private void BeginNamingTemplate()
+    {
+        _namingTemplate = true;
+
+        // Ad önerisi başlıktan gelir; kullanıcı çoğu zaman aynısını yazacaktı.
+        _templateName = string.IsNullOrWhiteSpace(_templateName)
+            ? Draft.Title.Trim()
+            : _templateName;
+    }
+
+    private async Task TemplateNameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveTemplate();
+        else if (e.Key == "Escape") _namingTemplate = false;
+    }
+
+    private async Task SaveTemplate()
+    {
+        if (string.IsNullOrWhiteSpace(_templateName)) return;
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var templates = scope.ServiceProvider.GetRequiredService<TemplateService>();
+
+        var saved = await templates.SaveAsync(State.ActiveUserId, _templateName, Draft.ToTemplate());
+
+        if (saved is null)
+        {
+            _problems = [$"En fazla {TemplateService.MaxPerUser} şablon tutulabilir. Önce birini silin."];
+            return;
+        }
+
+        _templates = await templates.GetAsync(State.ActiveUserId);
+        _namingTemplate = false;
+
+        State.ShowStatus($"\"{saved.Name}\" şablonu kaydedildi.");
     }
 
     /// <summary>Yapıştırılan adresten sağlayıcıyı tanır; kullanıcı elle değiştirebilir.</summary>

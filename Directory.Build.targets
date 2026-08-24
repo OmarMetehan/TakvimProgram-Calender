@@ -1,0 +1,27 @@
+<Project>
+
+  <!--
+    Smart App Control (Windows 11) imzasız derlemeleri karma değerlerine göre
+    engelliyor. Bir kez engellenen karma, derleme deterministik olduğu için
+    aynı kaynaktan her seferinde yeniden üretiliyordu; "yeniden derle" hiçbir
+    şeyi değiştirmiyor, sınamalar çalışmaz hâle geliyordu.
+
+    Hata ayıklama derlemelerinde her derlemeye yeni bir kimlik verilir:
+      - Deterministic kapalı  -> yönetilen derlemenin karması değişir.
+      - Dosya sürümü zamandan -> yerel çalıştırıcının (apphost.exe) karması da
+        değişir; sürüm bilgisi apphost'un kaynaklarına yazıldığı için.
+    Böylece engellenen bir karma bir sonraki derlemede geride kalır.
+
+    Bu, Smart App Control'ün çözümü değil, geçici çaresidir: kalıcı çözüm
+    ayarın kapatılmasıdır (Windows Güvenliği > Uygulama ve tarayıcı denetimi).
+    Yayın derlemesi deterministik ve sabit sürümlü kalır.
+
+    Bu dosya Directory.Build.props değil .targets olmalı: $(Configuration)
+    ancak ortak hedefler içe aktarıldıktan sonra değerine kavuşur.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' AND '$(OS)' == 'Windows_NT'">
+    <Deterministic>false</Deterministic>
+    <FileVersion>$([System.DateTime]::UtcNow.ToString("yyMM")).$([System.DateTime]::UtcNow.ToString("ddHH")).$([System.DateTime]::UtcNow.ToString("mmss")).0</FileVersion>
+  </PropertyGroup>
+
+</Project>
