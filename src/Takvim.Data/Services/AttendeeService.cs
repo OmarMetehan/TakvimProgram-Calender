@@ -20,15 +20,23 @@ public sealed record AttendeeInput(
 /// <param name="Tentative">Belirsiz bırakan sayısı.</param>
 /// <param name="NoResponse">Henüz yanıtlamayan sayısı.</param>
 /// <param name="Proposals">Yeni zaman öneren sayısı.</param>
+/// <param name="Stale">Toplantının şimdiki saatinden başka bir saate yanıt vermiş kişi sayısı.</param>
 public readonly record struct ResponseSummary(
-    int Accepted, int Declined, int Tentative, int NoResponse, int Proposals)
+    int Accepted, int Declined, int Tentative, int NoResponse, int Proposals, int Stale)
 {
     public int Total => Accepted + Declined + Tentative + NoResponse;
 
     /// <summary>Kullanıcıya gösterilen tek satırlık özet.</summary>
-    public string Text => Total == 0
-        ? "Katılımcı yok"
-        : $"{Accepted} kabul · {Declined} ret · {Tentative} belirsiz · {NoResponse} yanıt yok";
+    public string Text
+    {
+        get
+        {
+            if (Total == 0) return "Katılımcı yok";
+
+            var text = $"{Accepted} kabul · {Declined} ret · {Tentative} belirsiz · {NoResponse} yanıt yok";
+            return Stale > 0 ? $"{text} · {Stale} yanıt eski saate göre" : text;
+        }
+    }
 }
 
 /// <summary>
@@ -43,11 +51,15 @@ public sealed class AttendeeService(TakvimDbContext db, IClock clock)
 {
     private readonly ChangeLogWriter _log = new(db);
 
-    /// <summary>Etkinliğin katılımcıları; organizatör önce, sonra zorunlular.</summary>
+    /// <summary>
+    /// Etkinliğin katılımcıları; organizatör önce, sonra zorunlular.
+    /// Etkinlik de yüklenir: <see cref="Attendee.IsResponseStale"/> onsuz hesaplanamaz.
+    /// </summary>
     public Task<List<Attendee>> GetAsync(Guid eventId, CancellationToken ct = default)
         => db.Attendees
             .AsNoTracking()
             .Include(a => a.User)
+            .Include(a => a.Event)
             .Where(a => a.EventId == eventId)
             .OrderBy(a => a.Role)
             .ThenBy(a => a.DisplayName)
@@ -125,6 +137,7 @@ public sealed class AttendeeService(TakvimDbContext db, IClock clock)
         CancellationToken ct = default)
     {
         var attendee = await db.Attendees
+            .Include(a => a.Event)
             .FirstOrDefaultAsync(a => a.EventId == eventId && a.UserId == userId, ct)
             .ConfigureAwait(false);
 
@@ -134,6 +147,10 @@ public sealed class AttendeeService(TakvimDbContext db, IClock clock)
         attendee.ResponseComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
         attendee.RespondedAt = clock.GetCurrentInstant().ToDateTimeOffset();
         attendee.Mode = mode;
+
+        // Yanıtın hangi saate verildiği kaydedilir; toplantı sonradan taşınırsa
+        // bu yanıt "eski" olarak işaretlenebilsin.
+        attendee.RespondedForStartLocal = attendee.Event?.StartLocal;
 
         // Yanıt vermek bekleyen zaman önerisini geçersiz kılar.
         ClearProposal(attendee);
@@ -159,6 +176,7 @@ public sealed class AttendeeService(TakvimDbContext db, IClock clock)
         CancellationToken ct = default)
     {
         var attendee = await db.Attendees
+            .Include(a => a.Event)
             .FirstOrDefaultAsync(a => a.EventId == eventId && a.UserId == userId, ct)
             .ConfigureAwait(false);
 
@@ -170,6 +188,7 @@ public sealed class AttendeeService(TakvimDbContext db, IClock clock)
         attendee.ProposalNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         attendee.Response = ResponseStatus.Tentative;
         attendee.RespondedAt = clock.GetCurrentInstant().ToDateTimeOffset();
+        attendee.RespondedForStartLocal = attendee.Event?.StartLocal;
 
         _log.Record(Guid.NewGuid(), ChangeOperation.Update, nameof(Attendee), attendee.Id,
             calendarId: null, beforeJson: null, afterJson: null, userId,
@@ -206,26 +225,23 @@ public sealed class AttendeeService(TakvimDbContext db, IClock clock)
         attendee.Response = ResponseStatus.Accepted;
         attendee.RespondedAt = clock.GetCurrentInstant().ToDateTimeOffset();
 
-        // Saat değiştiği için diğer katılımcıların yanıtları geçersizleşir.
-        var others = await db.Attendees
-            .Where(a => a.EventId == attendee.EventId && a.Id != attendeeId)
-            .ToListAsync(ct).ConfigureAwait(false);
-
-        foreach (var other in others)
-        {
-            other.Response = ResponseStatus.NeedsAction;
-            other.ResponseComment = null;
-            other.RespondedAt = null;
-            ClearProposal(other);
-        }
+        // Öneren kişi yeni saati zaten kabul etmiş sayılır; yanıtı yeni saate
+        // verilmiştir. Diğerlerinin yanıtları silinmez: toplantı taşınınca
+        // kendiliğinden "eski saate göre" işaretlenirler. Böylece organizatör
+        // "Katılacak (eski saate göre)" ile "yanıt yok" arasındaki farkı görür.
+        attendee.RespondedForStartLocal = start;
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return (start, end);
     }
 
     /// <summary>
-    /// Etkinliğin saati değiştiğinde yanıtları sıfırlar. Kabul edilmiş bir
-    /// toplantının saati değiştiyse o kabul artık geçerli değildir.
+    /// Tüm yanıtları siler ve herkese yeniden sorar.
+    /// <para>
+    /// Saat değişikliğinde <b>kendiliğinden çağrılmaz</b>: taşınan bir toplantıda
+    /// yanıtlar korunur ve eski olarak işaretlenir. Bu yordam, organizatörün
+    /// bilinçli olarak "herkese yeniden sor" dediği durum içindir.
+    /// </para>
     /// </summary>
     public async Task ResetResponsesAsync(Guid eventId, CancellationToken ct = default)
     {
@@ -238,6 +254,7 @@ public sealed class AttendeeService(TakvimDbContext db, IClock clock)
             attendee.Response = ResponseStatus.NeedsAction;
             attendee.ResponseComment = null;
             attendee.RespondedAt = null;
+            attendee.RespondedForStartLocal = null;
             ClearProposal(attendee);
         }
 
@@ -260,7 +277,8 @@ public sealed class AttendeeService(TakvimDbContext db, IClock clock)
             list.Count(a => a.Response == ResponseStatus.Declined),
             list.Count(a => a.Response == ResponseStatus.Tentative),
             list.Count(a => a.Response == ResponseStatus.NeedsAction),
-            list.Count(a => a.HasProposal));
+            list.Count(a => a.HasProposal),
+            list.Count(a => a.IsResponseStale));
     }
 
     /// <summary>Kullanıcının yanıtlamadığı davetler.</summary>

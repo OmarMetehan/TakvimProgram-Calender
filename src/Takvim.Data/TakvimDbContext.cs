@@ -148,6 +148,9 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.Property(x => x.DisplayName).HasMaxLength(200);
             e.Property(x => x.ResponseComment).HasMaxLength(1000);
             e.Property(x => x.ProposalNote).HasMaxLength(1000);
+            // Hesaplanan alan; sütunu yok.
+            e.Ignore(x => x.IsResponseStale);
+            e.Ignore(x => x.HasProposal);
 
             e.HasOne(x => x.Event).WithMany(x => x.Attendees)
                 .HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);

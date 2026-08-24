@@ -9,6 +9,19 @@
                 : $"Yanıtınız: {AttendeeService.Describe(_me.Response)}")
         </div>
 
+        @if (_isStale)
+        {
+            <div class="oneri-kutusu">
+                Toplantının saati siz yanıtladıktan sonra değişti.
+                @if (_me.RespondedForStartLocal is { } given)
+                {
+                    <text>Yanıtınızı <strong>@TurkishFormat.DateTime(given)</strong> saatine vermiştiniz;</text>
+                }
+                yeni saat <strong>@TurkishFormat.DateTime(Occurrence.StartLocal)</strong>.
+                Yanıtınızı güncellemek ister misiniz?
+            </div>
+        }
+
         @if (_proposing)
         {
             <div style="display:flex;flex-direction:column;gap:7px">
@@ -92,6 +105,7 @@
     [Parameter] public EventCallback OnResponded { get; set; }
 
     private Attendee? _me;
+    private bool _isStale;
     private string _comment = "";
     private AttendanceMode _mode = AttendanceMode.InPerson;
 
@@ -110,12 +124,14 @@
 
         _me = await db.Attendees
             .AsNoTracking()
+            .Include(a => a.Event)
             .FirstOrDefaultAsync(a => a.EventId == EventId && a.UserId == State.ActiveUserId);
 
         if (_me is not null)
         {
             _comment = _me.ResponseComment ?? "";
             if (_me.Mode != AttendanceMode.Unspecified) _mode = _me.Mode;
+            _isStale = _me.IsResponseStale;
         }
     }
 

@@ -55,8 +55,9 @@ src/
 tests/
 ├─ Takvim.Core.Tests/   179 test — tekrarlama, zaman dilimi, ICS, ayrıştırıcı,
 │                       tatiller, izin motoru, müsaitlik hesabı
-└─ Takvim.Data.Tests/   109 test — seri düzenleme, silme, geri alma, hatırlatıcılar,
-                        çalışma düzeni, zamanlama, paylaşım yalıtımı, RSVP
+└─ Takvim.Data.Tests/   122 test — seri düzenleme, silme, geri alma, hatırlatıcılar,
+                        çalışma düzeni, zamanlama, paylaşım yalıtımı, RSVP,
+                        taşınan toplantıda eskiyen yanıtlar
 ```
 
 Veri katmanı testleri gerçek SQLite üzerinde çalışır (bellek içi dosya), EF Core'un
@@ -64,14 +65,16 @@ InMemory sağlayıcısıyla değil: zaman dilimi dönüştürücüleri ve indeks
 gerçek sağlayıcıda sınanabilir.
 
 ```
-dotnet test
+Testler.cmd
 ```
 
 > **Smart App Control notu.** Bu makinede Smart App Control açık
-> (`VerifiedAndReputablePolicyState = 1`) ve imzasız test derlemelerini bazen
-> engelliyor (`0x800711C7`). Veri testleri bu yüzden `TakvimVeriTestleri` adıyla
-> derleniyor. Aynı hata başka bir projede görülürse çözüm ya çıktı adını
-> değiştirmek ya da derlemeyi imzalamaktır; kodla ilgisi yoktur.
+> (`VerifiedAndReputablePolicyState = 1`). Microsoft imzalı `testhost.exe`
+> içine yüklenen imzasız test derlemelerini engelliyor (`0x800711C7`), bu yüzden
+> `dotnet test` çalışmıyor. Çözüm: test projeleri **xUnit v3** kullanıyor ve
+> kendi süreçleri olarak çalışıyor — uygulamanın kendisi (`Takvim.exe`) de aynı
+> nedenle sorunsuz açılıyor. `Testler.cmd` iki test yürütülebilirini doğrudan
+> çağırır.
 
 ---
 
@@ -113,10 +116,26 @@ başlığı okusa bile gizli veri sızmaz. Bu davranış testlerle korunur.
 | RSVP (katılacağım / belki / katılmayacağım), açıklama notu, katılım şekli | ✅ |
 | Yanıt takip paneli, sayaçlı özet | ✅ |
 | Yeni zaman önerme, organizatörün tek tıkla kabulü | ✅ |
+| Toplantı taşınınca yanıtların "eski saate göre" işaretlenmesi | ✅ |
 | Takvim paylaşımı, beş kademeli izin seviyesi | ✅ |
 | Vekil erişimi ve özel öğelerin vekilden gizlenmesi | ✅ |
 | CalDAV sunucusu | ⏸ |
 | E-posta ile davet (iTIP) | ⏸ tasarım gereği yok |
+
+### Toplantı taşınınca yanıtlara ne olur
+
+Yanıtlar **silinmez**. Her yanıtla birlikte "toplantı o an hangi saatteydi"
+kaydedilir; toplantı sonradan taşınırsa yanıt *eski saate göre* diye işaretlenir
+ve panelde uyarı rozetiyle görünür. Davetlinin ekranında da "saat değişti,
+yanıtınızı güncelleyin" uyarısı çıkar.
+
+Gerekçe: yanıtı silmek bilgiyi yok etmektir. *"Katılacak (eski saate göre)"*,
+*"yanıt yok"*tan daha fazlasını söyler — organizatör kimin zaten hevesli
+olduğunu, kime ayrıca sorması gerektiğini ayırt edebilir. Ayrıca toplantıyı on
+beş dakika kaydırmak sekiz kişinin cevabını birden silmez.
+
+Herkese yeniden sormak isteyen organizatör bunu düzenleyicideki **"Yanıtları
+sıfırla, herkese yeniden sor"** düğmesiyle açıkça yapar.
 
 ### Çok kullanıcılı model
 

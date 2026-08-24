@@ -81,6 +81,7 @@
                      OnDelete="DeleteFromEditor"
                      OnFindTime="OpenSchedulingAssistant"
                      OnAcceptProposal="AcceptProposal"
+                     OnResetResponses="ResetResponses"
                      OnCancel="CloseAll" />
     }
 
@@ -453,16 +454,13 @@
             await RunWrite(async events =>
             {
                 var result = await events.CreateAsync(draft.ToInput(State.ActiveUserId));
-                await SyncAttendeesAsync(result.PrimaryEventId, draft, timeChanged: false);
+                await SyncAttendeesAsync(result.PrimaryEventId, draft);
                 return result;
             }, draft.Attendees.Count > 0 ? "Toplantı oluşturuldu ve davetler gönderildi." : "Etkinlik oluşturuldu.");
 
             CloseAll();
             return;
         }
-
-        // Saat değiştiyse verilmiş yanıtlar geçersizleşir; kaydetmeden önce saptanır.
-        var timeChanged = await HasTimeChangedAsync(draft);
 
         // Var olan bir seride kapsam sorulmalı.
         if (draft.BelongsToSeries)
@@ -475,7 +473,7 @@
                     var result = await events.UpdateAsync(
                         draft.EventId!.Value, draft.RecurrenceId, scope, draft.ToInput(State.ActiveUserId));
 
-                    await SyncAttendeesAsync(result.PrimaryEventId, draft, timeChanged);
+                    await SyncAttendeesAsync(result.PrimaryEventId, draft);
                     return result;
                 }, "Etkinlik güncellendi.");
             });
@@ -487,7 +485,7 @@
             var result = await events.UpdateAsync(
                 draft.EventId!.Value, null, SeriesEditScope.AllInSeries, draft.ToInput(State.ActiveUserId));
 
-            await SyncAttendeesAsync(result.PrimaryEventId, draft, timeChanged);
+            await SyncAttendeesAsync(result.PrimaryEventId, draft);
             return result;
         }, "Etkinlik güncellendi.");
 
@@ -495,37 +493,45 @@
     }
 
     /// <summary>
-    /// Katılımcı listesini kaydeder. Etkinliğin saati değiştiyse verilmiş
-    /// yanıtlar sıfırlanır: kabul edilen şey artık başka bir saat.
+    /// Katılımcı listesini kaydeder.
+    /// <para>
+    /// Saat değişse bile yanıtlar silinmez: yanıtın hangi saate verildiği
+    /// kayıtlıdır ve toplantı taşınınca kendiliğinden "eski" olarak işaretlenir.
+    /// Yanıtı silmek bilgiyi yok etmek olurdu — "Katılacak (eski saate göre)",
+    /// "yanıt yok"tan daha fazlasını söyler. Herkese yeniden sormak isteyen
+    /// organizatör bunu düzenleyicideki düğmeyle açıkça yapar.
+    /// </para>
     /// </summary>
-    private async Task SyncAttendeesAsync(Guid eventId, EventDraft draft, bool timeChanged)
+    private async Task SyncAttendeesAsync(Guid eventId, EventDraft draft)
     {
         await using var scope = Scopes.CreateAsyncScope();
         var attendees = scope.ServiceProvider.GetRequiredService<AttendeeService>();
 
         await attendees.SyncAsync(eventId, draft.ToAttendeeInputs(), State.ActiveUserId);
-
-        if (timeChanged && draft.NotifyAttendees && !draft.NotifyOnlyNewAttendees)
-        {
-            await attendees.ResetResponsesAsync(eventId);
-        }
     }
 
-    /// <summary>Kaydedilecek saat, kayıtlı saatten farklı mı.</summary>
-    private async Task<bool> HasTimeChangedAsync(EventDraft draft)
+    /// <summary>Tüm yanıtları siler ve katılımcılara yeniden sorar.</summary>
+    private async Task ResetResponses()
     {
-        if (draft.EventId is not { } id) return false;
+        if (_draft is not { EventId: { } eventId } draft) return;
 
-        await using var scope = Scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<Takvim.Data.TakvimDbContext>();
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var attendees = scope.ServiceProvider.GetRequiredService<AttendeeService>();
+            await attendees.ResetResponsesAsync(eventId);
+        }
 
-        var current = await db.Events
-            .AsNoTracking()
-            .Where(e => e.Id == id)
-            .Select(e => new { e.StartLocal, e.EndLocal })
-            .FirstOrDefaultAsync();
+        foreach (var attendee in draft.Attendees)
+        {
+            attendee.Response = ResponseStatus.NeedsAction;
+            attendee.ResponseComment = null;
+            attendee.IsResponseStale = false;
+            attendee.RespondedForStart = null;
+            attendee.ProposalSummary = null;
+        }
 
-        return current is not null && (current.StartLocal != draft.Start || current.EndLocal != draft.End);
+        State.ShowStatus("Yanıtlar sıfırlandı; katılımcılara yeniden soruluyor.");
+        StateHasChanged();
     }
 
     /// <summary>

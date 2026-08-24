@@ -149,7 +149,9 @@
 
         @* ---------- Katılımcılar ---------- *@
 
-        <AttendeeSection Draft="Draft" OnAcceptProposal="OnAcceptProposal" />
+        <AttendeeSection Draft="Draft"
+                         OnAcceptProposal="OnAcceptProposal"
+                         OnResetResponses="OnResetResponses" />
 
         @* ---------- Konum ---------- *@
 
@@ -306,6 +308,9 @@
 
     /// <summary>Bir katılımcının zaman önerisi kabul edildiğinde.</summary>
     [Parameter] public EventCallback<AttendeeDraft> OnAcceptProposal { get; set; }
+
+    /// <summary>Organizatör tüm yanıtları sıfırlayıp yeniden sormak istediğinde.</summary>
+    [Parameter] public EventCallback OnResetResponses { get; set; }
 
     private List<string> _problems = [];
 

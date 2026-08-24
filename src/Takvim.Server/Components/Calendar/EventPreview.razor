@@ -100,6 +100,11 @@
                         <span class="yanit @ResponseClass(attendee.Response)">
                             @AttendeeService.Describe(attendee.Response)
                         </span>
+                        @if (attendee.IsResponseStale)
+                        {
+                            <span class="yanit yanit--eski"
+                                  title="Bu yanıt toplantının eski saatine verilmişti.">⚠</span>
+                        }
                         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                             @attendee.DisplayName
                             @if (attendee.Role == AttendeeRole.Optional)

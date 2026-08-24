@@ -300,6 +300,16 @@ public sealed class AttendeeDraft
     /// <summary>Bekleyen zaman önerisinin özeti; varsa arayüzde gösterilir.</summary>
     public string? ProposalSummary { get; set; }
 
+    /// <summary>
+    /// Yanıt, toplantının şimdiki saatinden başka bir saate verilmiş mi.
+    /// Taslak açılırken kaydedilmiş saate göre hesaplanır; kullanıcı formda
+    /// saati değiştirirken her tuş vuruşunda yeniden hesaplanmaz.
+    /// </summary>
+    public bool IsResponseStale { get; set; }
+
+    /// <summary>Yanıtın verildiği saat; eski yanıtlarda ipucu olarak gösterilir.</summary>
+    public LocalDateTime? RespondedForStart { get; set; }
+
     /// <summary>Bu makinede hesabı olmayan biri: davet ona ulaşmaz.</summary>
     public bool IsExternal => UserId is null;
 
@@ -318,6 +328,8 @@ public sealed class AttendeeDraft
             CanSeeGuestList = attendee.CanSeeGuestList,
             Response = attendee.Response,
             ResponseComment = attendee.ResponseComment,
+            IsResponseStale = attendee.IsResponseStale,
+            RespondedForStart = attendee.RespondedForStartLocal,
             ProposalSummary = attendee.ProposedStartLocal is { } start
                 ? $"{start:dd.MM.yyyy HH:mm}"
                 : null,

@@ -18,7 +18,25 @@
             <span><strong>@Count(ResponseStatus.Declined)</strong> ret</span>
             <span><strong>@Count(ResponseStatus.Tentative)</strong> belirsiz</span>
             <span><strong>@Count(ResponseStatus.NeedsAction)</strong> yanıt yok</span>
+            @if (StaleCount > 0)
+            {
+                <span style="color:var(--uyari)">
+                    <strong>@StaleCount</strong> yanıt eski saate göre
+                </span>
+            }
         </div>
+
+        @if (StaleCount > 0)
+        {
+            <div class="oneri-kutusu" style="margin-bottom:8px">
+                Toplantı taşındığı için bu yanıtlar başka bir saate verilmiş.
+                Kişiler yeni saati görüp güncelleyebilir.
+                <button class="dugme dugme--sade" style="height:24px;font-size:12px"
+                        @onclick="() => OnResetResponses.InvokeAsync()">
+                    Yanıtları sıfırla, herkese yeniden sor
+                </button>
+            </div>
+        }
     }
 
     @* ---------------- Liste ---------------- *@
@@ -63,6 +81,11 @@
                       title="@(attendee.ResponseComment ?? AttendeeService.Describe(attendee.Response))">
                     @AttendeeService.Describe(attendee.Response)
                 </span>
+
+                @if (attendee.IsResponseStale)
+                {
+                    <span class="yanit yanit--eski" title="@StaleTitle(attendee)">⚠ eski</span>
+                }
             }
 
             <select class="alan" style="width:112px;height:28px;font-size:12px"
@@ -170,11 +193,22 @@
     /// <summary>Organizatör bir zaman önerisini kabul ettiğinde.</summary>
     [Parameter] public EventCallback<AttendeeDraft> OnAcceptProposal { get; set; }
 
+    /// <summary>Organizatör tüm yanıtları sıfırlayıp yeniden sormak istediğinde.</summary>
+    [Parameter] public EventCallback OnResetResponses { get; set; }
+
     private string _search = "";
     private List<DirectoryEntry> _matches = [];
     private AttendeeDraft? _expanded;
 
     private int Count(ResponseStatus status) => Draft.Attendees.Count(a => a.Response == status);
+
+    private int StaleCount => Draft.Attendees.Count(a => a.IsResponseStale);
+
+    /// <summary>Eski yanıt rozetinin açıklaması: hangi saate verilmişti.</summary>
+    private static string StaleTitle(AttendeeDraft attendee)
+        => attendee.RespondedForStart is { } given
+            ? $"Bu yanıt {TurkishFormat.DateTime(given)} saatine verilmişti; toplantı sonradan taşındı."
+            : "Bu yanıt başka bir saate verilmişti.";
 
     private static string ResponseClass(ResponseStatus status) => status switch
     {

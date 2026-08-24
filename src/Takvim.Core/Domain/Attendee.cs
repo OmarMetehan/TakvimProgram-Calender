@@ -76,6 +76,17 @@ public class Attendee
 
     public DateTimeOffset? RespondedAt { get; set; }
 
+    /// <summary>
+    /// Yanıt verildiğinde toplantının başlangıç saati.
+    /// <para>
+    /// Toplantı sonradan taşınırsa yanıt silinmez; bu alan sayesinde "hangi
+    /// saate verilmiş bir evet" olduğu bilinir ve arayüz onu eski olarak
+    /// işaretler. Yanıtı silmek bilgiyi yok etmek olurdu: "Katılacak (eski
+    /// saate göre)", "yanıt yok"tan daha fazlasını söyler.
+    /// </para>
+    /// </summary>
+    public LocalDateTime? RespondedForStartLocal { get; set; }
+
     public AttendanceMode Mode { get; set; } = AttendanceMode.Unspecified;
 
     // ------------------------------------------------------------------
@@ -107,6 +118,19 @@ public class Attendee
 
     /// <summary>Bekleyen bir zaman önerisi var mı.</summary>
     public bool HasProposal => ProposedStartLocal is not null;
+
+    /// <summary>
+    /// Yanıt, toplantının şimdiki saatinden başka bir saate verilmiş mi.
+    /// <para>
+    /// <see cref="Event"/> yüklenmemişse false döner: bilinmeyen durumda
+    /// yanlış uyarı vermektense sessiz kalmak yeğdir.
+    /// </para>
+    /// </summary>
+    public bool IsResponseStale
+        => Response != ResponseStatus.NeedsAction
+        && RespondedForStartLocal is { } given
+        && Event is not null
+        && Event.StartLocal != given;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 

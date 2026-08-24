@@ -260,7 +260,7 @@ public class RsvpTests : IDisposable
     }
 
     [Fact]
-    public async Task Oneri_kabul_edilince_saat_doner_ve_digerleri_sifirlanir()
+    public async Task Oneri_kabul_edilince_onerilen_saat_doner()
     {
         var eventId = await CreateMeetingAsync();
 
@@ -277,12 +277,16 @@ public class RsvpTests : IDisposable
 
         Assert.NotNull(picked);
         Assert.Equal(TestDatabase.Parse("2026-03-02 14:00"), picked.Value.Start);
+        Assert.Equal(TestDatabase.Parse("2026-03-02 15:00"), picked.Value.End);
 
         var attendees = await _t.Attendees.GetAsync(eventId);
 
-        // Öneren kabul etmiş sayılır; saat değiştiği için Mehmet'in kabulü düşer.
+        // Öneren kişi yeni saati kabul etmiş sayılır.
         Assert.Equal(ResponseStatus.Accepted, attendees.Single(a => a.UserId == _ayse).Response);
-        Assert.Equal(ResponseStatus.NeedsAction, attendees.Single(a => a.UserId == _mehmet).Response);
+
+        // Mehmet'in kabulü silinmez; toplantı taşınınca "eski saate göre"
+        // olarak işaretlenir. Bkz. StaleResponseTests.
+        Assert.Equal(ResponseStatus.Accepted, attendees.Single(a => a.UserId == _mehmet).Response);
     }
 
     [Fact]

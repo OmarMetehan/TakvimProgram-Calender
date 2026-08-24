@@ -1418,3 +1418,9 @@ kbd {
     background: color-mix(in srgb, var(--uyari) 8%, transparent);
     font-size: 12px;
 }
+
+/* Toplantı taşındıktan sonra eski saate verilmiş kalan yanıt */
+.yanit--eski {
+    background: color-mix(in srgb, var(--uyari) 18%, transparent);
+    color: var(--uyari);
+}
