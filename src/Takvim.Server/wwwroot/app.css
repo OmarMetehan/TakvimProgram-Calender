@@ -1660,3 +1660,31 @@ kbd {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Zamanlama yardımcısı: aralığı sürükleme katmanı.
+   Şerit içindeki süsler fare olaylarını yutmamalı; ölçü tek katmandan alınır. */
+.zy-mesai-disi,
+.zy-mesgul,
+.zy-saat { pointer-events: none }
+
+.zy-surukle {
+    position: absolute;
+    left: 140px;
+    right: 0;
+    top: 24px;
+    bottom: 0;
+    z-index: 2;
+    cursor: grab;
+}
+
+.zy-surukle:active { cursor: grabbing }
+
+.zy-surukle:focus-visible {
+    outline: 2px solid var(--birincil);
+    outline-offset: -2px;
+}
+
+.zy-secim--suruklenen {
+    border-color: var(--birincil);
+    background: color-mix(in srgb, var(--birincil) 18%, transparent);
+}

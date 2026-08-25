@@ -127,6 +127,82 @@ public sealed class SharingService(TakvimDbContext db)
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Takvimin sahipliğini başka bir kullanıcıya devreder.
+    /// <para>
+    /// Devreden kişi takvimsiz kalmasın diye kendisine <b>tam denetim</b>
+    /// paylaşımı açılır: sahiplik biriyle paylaşılamaz, ama devrettikten sonra
+    /// da çalışmaya devam etmek isteyen kişi çoğunlukla vardır. Yeni sahibin
+    /// kendine ait paylaşım satırı varsa silinir — sahip zaten her şeyi görür,
+    /// artık gereksizdir.
+    /// </para>
+    /// <para>
+    /// Kişisel takvimler devredilmez: bir hesabın kişisel takvimi o hesabın
+    /// kimliğidir, sahibi değişirse hesap takvimsiz kalır.
+    /// </para>
+    /// </summary>
+    /// <returns>Devir yapıldıysa null, yapılamadıysa gerekçesi.</returns>
+    public async Task<string?> TransferOwnershipAsync(
+        Guid calendarId,
+        Guid newOwnerUserId,
+        Guid actorUserId,
+        CancellationToken ct = default)
+    {
+        var calendar = await db.Calendars
+            .FirstOrDefaultAsync(c => c.Id == calendarId, ct).ConfigureAwait(false);
+
+        if (calendar is null) return "Takvim bulunamadı.";
+        if (calendar.OwnerUserId != actorUserId) return "Yalnızca takvimin sahibi devredebilir.";
+        if (calendar.OwnerUserId == newOwnerUserId) return "Takvim zaten bu kişinin.";
+
+        if (calendar.Kind == CalendarKind.Personal)
+        {
+            return "Kişisel takvim devredilemez; bu takvim hesabın kendisine aittir.";
+        }
+
+        var newOwner = await db.Users
+            .FirstOrDefaultAsync(u => u.Id == newOwnerUserId, ct).ConfigureAwait(false);
+
+        if (newOwner is null) return "Devredilecek hesap bulunamadı.";
+
+        var previousOwnerId = calendar.OwnerUserId;
+        calendar.OwnerUserId = newOwnerUserId;
+
+        // Yeni sahibin eski paylaşım satırı anlamını yitirir.
+        var obsolete = await db.CalendarShares
+            .Where(s => s.CalendarId == calendarId && s.GranteeUserId == newOwnerUserId)
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        db.CalendarShares.RemoveRange(obsolete);
+
+        // Eski sahip erişimini kaybetmesin.
+        var existing = await db.CalendarShares
+            .FirstOrDefaultAsync(s => s.CalendarId == calendarId && s.GranteeUserId == previousOwnerId, ct)
+            .ConfigureAwait(false);
+
+        if (existing is null)
+        {
+            db.CalendarShares.Add(new CalendarShare
+            {
+                CalendarId = calendarId,
+                GranteeUserId = previousOwnerId,
+                Level = SharingLevel.FullControl,
+            });
+        }
+        else
+        {
+            existing.Level = SharingLevel.FullControl;
+        }
+
+        _log.Record(Guid.NewGuid(), ChangeOperation.Update, nameof(Calendar), calendar.Id,
+            calendarId, beforeJson: null, afterJson: null, actorUserId,
+            summary: $"\"{calendar.Name}\" takviminin sahipliği {newOwner.DisplayName} kişisine devredildi");
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        return null;
+    }
+
     /// <summary>Bir takvimin paylaşım geçmişi; denetim görünümü için.</summary>
     public Task<List<ChangeLogEntry>> GetHistoryAsync(Guid calendarId, CancellationToken ct = default)
         => db.ChangeLog

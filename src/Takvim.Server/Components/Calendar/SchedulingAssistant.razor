@@ -46,7 +46,24 @@
     </div>
 
     @* ---------- Müsaitlik ızgarası ---------- *@
-    <div style="border:1px solid var(--cizgi);border-radius:var(--yuvarlak);overflow:hidden">
+    <div style="border:1px solid var(--cizgi);border-radius:var(--yuvarlak);overflow:hidden;position:relative">
+
+        @* Sürükleme katmanı satırların üstünde durur: fare olayları tek bir
+           öğede toplanınca hangi satırın üzerinde olduğumuz önemsizleşir ve
+           ölçü için tek bir dikdörtgen yeter. *@
+        @if (_lanes.Count > 0)
+        {
+            <div class="zy-surukle" @ref="_dragLayer"
+                 role="slider" tabindex="0"
+                 aria-label="Toplantı aralığı"
+                 aria-valuetext="@TurkishFormat.TimeRange(LocalOf(_selectedStart), LocalOf(_selectedEnd))"
+                 @onmousedown="BeginDrag"
+                 @onmousemove="ContinueDrag"
+                 @onmouseup="EndDrag"
+                 @onmouseleave="EndDrag"
+                 @onkeydown="OnDragKey">
+            </div>
+        }
 
         <div class="zy-satir zy-satir--baslik">
             <div class="zy-ad">Takvim</div>
@@ -93,7 +110,7 @@
                     }
 
                     @* Seçilen aralık *@
-                    <div class="zy-secim"
+                    <div class="zy-secim @(_dragging ? "zy-secim--suruklenen" : "")"
                          style="left:@(Percent(RatioOf(_selectedStart)));width:@(Percent(SelectionWidth))"
                          aria-label="Seçilen aralık"></div>
                 </div>
@@ -108,6 +125,10 @@
             hesapları olmadığı için müsaitlikleri bilinemiyor.
         </div>
     }
+
+    <div style="font-size:12px;color:var(--metin-3)">
+        Aralığı ızgarada sürükleyerek taşıyabilirsiniz; ok tuşları bir adım kaydırır.
+    </div>
 
     <div style="display:flex;align-items:center;gap:10px">
         <strong style="font-size:15px">
@@ -154,6 +175,7 @@
     [CascadingParameter] public required CalendarUiState State { get; set; }
 
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
+    [Inject] public required IJSRuntime Js { get; set; }
 
     /// <summary>Düzenleyiciden gelen başlangıç noktası; yardımcı buradan açılır.</summary>
     [Parameter] public LocalDateTime? InitialStart { get; set; }
@@ -189,6 +211,96 @@
     private Instant _selectedEnd;
 
     private static IEnumerable<int> Hours => Enumerable.Range(GridStartHour, GridEndHour - GridStartHour + 1);
+
+    // ------------------------------------------------------------------
+    // Aralığı sürükleyerek taşıma
+    // ------------------------------------------------------------------
+
+    private ElementReference _dragLayer;
+    private bool _dragging;
+
+    /// <summary>Katmanın ekrandaki yeri; sürükleme boyunca sabit sayılır.</summary>
+    private double _layerLeft;
+    private double _layerWidth;
+
+    /// <summary>
+    /// Basılan noktanın seçimin başına uzaklığı. Blok "tutulduğu yerden"
+    /// taşınsın diye saklanır; yoksa imleç her zaman bloğun başına atlardı.
+    /// </summary>
+    private Duration _grabOffset;
+
+    private async Task BeginDrag(MouseEventArgs e)
+    {
+        var rect = await Js.InvokeAsync<ElementRect?>("takvim.getRect", _dragLayer);
+        if (rect is not { Width: > 0 }) return;
+
+        _layerLeft = rect.Left;
+        _layerWidth = rect.Width;
+
+        var pointer = InstantAt(e.ClientX);
+
+        // Basılan nokta seçimin içindeyse blok tutulmuş sayılır; dışındaysa
+        // seçim oraya taşınır ve tutamak başındadır.
+        _grabOffset = pointer >= _selectedStart && pointer < _selectedEnd
+            ? pointer - _selectedStart
+            : Duration.Zero;
+
+        _dragging = true;
+        MoveSelection(pointer - _grabOffset);
+    }
+
+    private void ContinueDrag(MouseEventArgs e)
+    {
+        if (!_dragging) return;
+
+        MoveSelection(InstantAt(e.ClientX) - _grabOffset);
+    }
+
+    private void EndDrag() => _dragging = false;
+
+    private void OnDragKey(KeyboardEventArgs e)
+    {
+        var step = Duration.FromMinutes(_stepMinutes);
+
+        switch (e.Key)
+        {
+            case "ArrowLeft": MoveSelection(_selectedStart - step); break;
+            case "ArrowRight": MoveSelection(_selectedStart + step); break;
+            default: return;
+        }
+    }
+
+    /// <summary>Ekran koordinatını ızgaradaki ana çevirir.</summary>
+    private Instant InstantAt(double clientX)
+    {
+        var ratio = Math.Clamp((clientX - _layerLeft) / _layerWidth, 0, 1);
+        var minutes = ratio * (GridEndHour - GridStartHour) * 60;
+
+        return ToInstant(_date.At(new LocalTime(GridStartHour, 0))) + Duration.FromMinutes(minutes);
+    }
+
+    /// <summary>Aralığı adıma yuvarlayıp ızgaranın içinde tutarak yerleştirir.</summary>
+    private void MoveSelection(Instant start)
+    {
+        var gridStart = ToInstant(_date.At(new LocalTime(GridStartHour, 0)));
+        var gridEnd = ToInstant(_date.At(new LocalTime(GridEndHour, 0)));
+
+        var step = Math.Max(5, _stepMinutes);
+        var minutesFromStart = (start - gridStart).TotalMinutes;
+        var snapped = Math.Round(minutesFromStart / step) * step;
+
+        var candidate = gridStart + Duration.FromMinutes(snapped);
+
+        // Toplantı ızgaranın dışına taşmasın; sonuna dayandığında geri çekilir.
+        var latest = gridEnd - Duration.FromMinutes(_durationMinutes);
+        if (candidate > latest) candidate = latest;
+        if (candidate < gridStart) candidate = gridStart;
+
+        Select(candidate);
+    }
+
+    /// <summary>takvim.getRect çıktısının okunan alanları.</summary>
+    private sealed record ElementRect(double Left, double Width);
 
     protected override async Task OnInitializedAsync()
     {

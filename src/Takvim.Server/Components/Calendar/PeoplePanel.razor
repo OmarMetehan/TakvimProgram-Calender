@@ -184,6 +184,60 @@
                                     @onclick="AddShare">Paylaş</button>
                         </div>
                     }
+
+                    @* ---------------- Sahiplik devri ---------------- *@
+
+                    @if (SelectedCalendar is { Kind: not CalendarKind.Personal })
+                    {
+                        <details style="margin-top:12px">
+                            <summary style="cursor:pointer;font-size:13px;color:var(--metin-2)">
+                                Sahipliği devret
+                            </summary>
+
+                            <p style="color:var(--metin-2);font-size:12px;margin:8px 0">
+                                Devirden sonra takvim karşı tarafındır: paylaşımları o yönetir,
+                                silmeye de o karar verir. Siz erişiminizi kaybetmezsiniz — size
+                                otomatik olarak <b>tam denetim</b> paylaşımı açılır.
+                            </p>
+
+                            @if (_error is { } transferError)
+                            {
+                                <div role="alert" style="color:var(--tehlike);font-size:12px;margin-bottom:6px">
+                                    @transferError
+                                </div>
+                            }
+
+                            <div style="display:flex;gap:6px;align-items:end">
+                                <div style="flex:1">
+                                    <label class="etiket" for="devir-kisi">Yeni sahip</label>
+                                    <select id="devir-kisi" class="alan" @bind="_transferToId">
+                                        <option value="@Guid.Empty">Seçin…</option>
+                                        @foreach (var user in State.Users.Where(u => u.Id != State.ActiveUserId))
+                                        {
+                                            <option value="@user.Id">@user.DisplayName</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                @if (_confirmingTransfer)
+                                {
+                                    <button class="dugme" @onclick="() => _confirmingTransfer = false">Vazgeç</button>
+                                    <button class="dugme dugme--tehlike" @onclick="Transfer">Devri onayla</button>
+                                }
+                                else
+                                {
+                                    <button class="dugme" disabled="@(_transferToId == Guid.Empty)"
+                                            @onclick="() => _confirmingTransfer = true">Devret</button>
+                                }
+                            </div>
+                        </details>
+                    }
+                    else if (SelectedCalendar is not null)
+                    {
+                        <div style="font-size:12px;color:var(--metin-3);margin-top:12px">
+                            Kişisel takvim devredilemez; bu takvim hesabın kendisine aittir.
+                        </div>
+                    }
                 </div>
             }
         </section>
@@ -224,6 +278,12 @@
     private List<Calendar> OwnCalendars =>
         [.. State.Calendars.Where(c => c.OwnerUserId == State.ActiveUserId && !c.IsReadOnly)];
 
+    private Guid _transferToId;
+    private bool _confirmingTransfer;
+
+    private Calendar? SelectedCalendar
+        => State.Calendars.FirstOrDefault(c => c.Id == _calendarId);
+
     /// <summary>Henüz paylaşılmamış hesaplar; kendisi listede olmaz.</summary>
     private List<User> ShareCandidates =>
         [.. State.Users.Where(u => u.Id != State.ActiveUserId && _shares.All(s => s.GranteeUserId != u.Id))];
@@ -232,6 +292,39 @@
     {
         _calendarId = OwnCalendars.FirstOrDefault()?.Id ?? Guid.Empty;
         await LoadSharesAsync();
+    }
+
+    private async Task Transfer()
+    {
+        _confirmingTransfer = false;
+        _error = null;
+
+        if (_transferToId == Guid.Empty) return;
+
+        var calendarId = _calendarId;
+        var newOwnerId = _transferToId;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var sharing = scope.ServiceProvider.GetRequiredService<SharingService>();
+
+            if (await sharing.TransferOwnershipAsync(calendarId, newOwnerId, State.ActiveUserId) is { } problem)
+            {
+                _error = problem;
+                return;
+            }
+        }
+
+        _transferToId = Guid.Empty;
+
+        // Takvim listesi ve izinler değişti; her ikisi de baştan yüklenmeli.
+        await State.LoadUserContextAsync();
+        await State.ReloadAsync();
+
+        _calendarId = OwnCalendars.FirstOrDefault()?.Id ?? Guid.Empty;
+        await LoadSharesAsync();
+
+        State.ShowStatus("Takvimin sahipliği devredildi.");
     }
 
     private static string Initials(string? name)
