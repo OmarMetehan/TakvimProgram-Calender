@@ -74,6 +74,10 @@ public static class TakvimHost
 
         TakvimPaths.EnsureCreated();
 
+        // Bekleyen geri yükleme, veritabanına ilk dokunuştan önce uygulanır.
+        // Sonraya kalırsa açık bağlantıların altından dosya değişir.
+        BackupService.ApplyPendingRestore();
+
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
         builder.Services.AddDbContext<TakvimDbContext>(options =>
@@ -110,6 +114,7 @@ public static class TakvimHost
         builder.Services.AddScoped<AttachmentService>();
         builder.Services.AddScoped<CalendarService>();
         builder.Services.AddScoped<CategoryService>();
+        builder.Services.AddScoped<BackupService>();
         builder.Services.AddScoped<LocationService>();
         builder.Services.AddScoped<TemplateService>();
         builder.Services.AddScoped<SearchService>();
@@ -135,6 +140,7 @@ public static class TakvimHost
         builder.Services.AddHttpClient<MailReader>();
         builder.Services.AddHttpClient<MailService>();
         builder.Services.AddHostedService<MailScanner>();
+        builder.Services.AddHostedService<BackupScheduler>();
         builder.Services.AddScoped<CalendarBootstrapper>();
 
         // Hatırlatıcı zamanlayıcısı uygulama ömrü boyunca tek örnektir; sonucu

@@ -74,6 +74,11 @@
     <section class="kenar__bolum">
         <h2 class="kenar__baslik">Araçlar</h2>
 
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenBackup.InvokeAsync()">
+            <span aria-hidden="true">🗄</span>
+            <span class="liste-ogesi__ad">Yedekleme</span>
+        </button>
+
         <button type="button" class="liste-ogesi" @onclick="() => OnOpenTrash.InvokeAsync()">
             <span aria-hidden="true">🗑</span>
             <span class="liste-ogesi__ad">Çöp kutusu</span>
@@ -149,6 +154,7 @@
     [Parameter] public EventCallback OnOpenMail { get; set; }
     [Parameter] public EventCallback OnManageCalendars { get; set; }
     [Parameter] public EventCallback OnManageCategories { get; set; }
+    [Parameter] public EventCallback OnOpenBackup { get; set; }
 
     /// <summary>Bekleyen e-posta önerisi sayısı; sıfırsa rozet gösterilmez.</summary>
     [Parameter] public int ProposalCount { get; set; }
