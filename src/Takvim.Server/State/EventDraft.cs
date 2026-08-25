@@ -64,6 +64,13 @@ public sealed class EventDraft
     /// <summary>Davetliler. Boşsa etkinlik kişiseldir, toplantı değildir.</summary>
     public List<AttendeeDraft> Attendees { get; set; } = [];
 
+    /// <summary>
+    /// Tutulacak oda ve ekipmanlar. Kaydedilene kadar burada durur: kullanıcı
+    /// yeni bir toplantı kurarken odayı da seçmek ister, önce kaydedip sonra
+    /// dönmek istemez.
+    /// </summary>
+    public List<Guid> ResourceIds { get; set; } = [];
+
     /// <summary>Etkinliğin organizatörü; katılımcı listesinde ayrı gösterilir.</summary>
     public Guid? OrganizerUserId { get; set; }
 

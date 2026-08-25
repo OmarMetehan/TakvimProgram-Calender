@@ -1781,3 +1781,42 @@ kbd {
     border-color: var(--tehlike);
     color: var(--tehlike);
 }
+
+/* Oda ve ekipman rezervasyonu */
+.kaynak-satiri {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px;
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak-s);
+    margin-bottom: 5px;
+}
+
+.kaynak-arama {
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak);
+    padding: 9px;
+    margin-top: 5px;
+}
+
+.kaynak-aday {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border: 1px solid transparent;
+    border-radius: var(--yuvarlak-s);
+    background: transparent;
+    color: var(--metin);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.kaynak-aday:hover:not(:disabled) { background: var(--yuzey-2); border-color: var(--cizgi) }
+.kaynak-aday--dolu { opacity: .55; cursor: not-allowed }
+
+.kaynak-satiri--kapali { opacity: .55 }

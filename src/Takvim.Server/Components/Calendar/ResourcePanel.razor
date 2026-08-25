@@ -1,0 +1,375 @@
+@* Oda ve ekipman tanımları ile onay kuyruğu. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel panel--genis" role="dialog" aria-modal="true" aria-label="Odalar ve ekipman">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Odalar ve ekipman</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        @* ---------- Onay kuyruğu ---------- *@
+
+        @if (_pending.Count > 0)
+        {
+            <section>
+                <h3 style="font-size:14px;margin:0 0 6px">
+                    Onayınızı bekleyen talepler (@_pending.Count)
+                </h3>
+
+                @foreach (var request in _pending)
+                {
+                    <div class="kaynak-satiri" style="align-items:flex-start">
+                        <span aria-hidden="true">⏳</span>
+
+                        <span style="flex:1;min-width:0">
+                            <span style="display:block;font-weight:500">
+                                @(request.Resource?.Name ?? "Kaynak")
+                            </span>
+                            <span style="display:block;font-size:12px;color:var(--metin-2)">
+                                @(request.Event?.Title ?? "(silinmiş etkinlik)") ·
+                                @TurkishFormat.DateTime(LocalOf(request.StartUtc)) –
+                                @TurkishFormat.Time(LocalOf(request.EndUtc))
+                            </span>
+                            <span style="display:block;font-size:11px;color:var(--metin-3)">
+                                İsteyen: @(NameOf(request.RequestedByUserId))
+                            </span>
+                        </span>
+
+                        <button class="dugme" @onclick="() => Respond(request.Id, false)">Reddet</button>
+                        <button class="dugme dugme--birincil"
+                                @onclick="() => Respond(request.Id, true)">Onayla</button>
+                    </div>
+                }
+            </section>
+        }
+
+        @* ---------- Tanımlar ---------- *@
+
+        <section>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <h3 style="font-size:14px;margin:0">Tanımlı kaynaklar</h3>
+                <span class="panel__bosluk"></span>
+
+                <label class="liste-ogesi" style="padding-left:0">
+                    <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                           checked="@_showInactive" @onchange="OnShowInactiveToggled" />
+                    <span class="liste-ogesi__ad">Kapatılanlar da</span>
+                </label>
+
+                <button class="dugme dugme--birincil" @onclick="BeginCreate">+ Yeni</button>
+            </div>
+
+            @if (_error is { } error)
+            {
+                <div role="alert" style="color:var(--tehlike);font-size:12px;margin-bottom:6px">@error</div>
+            }
+
+            @if (_editing is not null)
+            {
+                <div class="kaynak-arama" style="margin-bottom:10px">
+                    <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
+                        <div>
+                            <label class="etiket" for="kaynak-ad">Ad</label>
+                            <input id="kaynak-ad" class="alan" placeholder="Toplantı Odası A"
+                                   @bind="_name" @bind:event="oninput" />
+                        </div>
+
+                        <div>
+                            <label class="etiket" for="kaynak-tur">Tür</label>
+                            <select id="kaynak-tur" class="alan" style="width:130px" @bind="_kind">
+                                <option value="@ResourceKind.Room">Oda</option>
+                                <option value="@ResourceKind.Equipment">Ekipman</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px">
+                        <div>
+                            <label class="etiket" for="kaynak-konum">Konum</label>
+                            <input id="kaynak-konum" class="alan" placeholder="3. kat, B blok"
+                                   @bind="_location" @bind:event="oninput" />
+                        </div>
+
+                        @if (_kind == ResourceKind.Room)
+                        {
+                            <div>
+                                <label class="etiket" for="kaynak-kapasite">Kapasite</label>
+                                <input id="kaynak-kapasite" class="alan" type="number" min="1" max="1000"
+                                       style="width:110px" @bind="_capacity" />
+                            </div>
+                        }
+                    </div>
+
+                    <div style="margin-top:8px">
+                        <span class="etiket">Donanım</span>
+                        <div style="display:flex;gap:5px;flex-wrap:wrap">
+                            @foreach (var feature in AllFeatures)
+                            {
+                                var selected = _features.HasFlag(feature);
+
+                                <button type="button" class="rozet"
+                                        style="border:1px solid @(selected ? "var(--birincil)" : "var(--cizgi)")"
+                                        aria-pressed="@(selected ? "true" : "false")"
+                                        @onclick="() => _features ^= feature">
+                                    @Resource.FeatureName(feature)
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+                        <div>
+                            <label class="etiket" for="kaynak-politika">Rezervasyon</label>
+                            <select id="kaynak-politika" class="alan" @bind="_policy">
+                                <option value="@BookingPolicy.AutoAccept">Boşsa kendiliğinden ver</option>
+                                <option value="@BookingPolicy.RequiresApproval">Onaydan geçsin</option>
+                            </select>
+                        </div>
+
+                        @if (_policy == BookingPolicy.RequiresApproval)
+                        {
+                            <div>
+                                <label class="etiket" for="kaynak-sorumlu">Sorumlu</label>
+                                <select id="kaynak-sorumlu" class="alan" @bind="_approverChoice">
+                                    <option value="">Takvim sahibi</option>
+                                    @foreach (var user in State.Users)
+                                    {
+                                        <option value="@user.Id">@user.DisplayName</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                    </div>
+
+                    <div style="display:flex;gap:6px;margin-top:10px">
+                        @if (_editing != Guid.Empty)
+                        {
+                            <button class="dugme dugme--tehlike" @onclick="Delete">Kalıcı sil</button>
+                        }
+
+                        <span class="panel__bosluk"></span>
+                        <button class="dugme" @onclick="() => _editing = null">Vazgeç</button>
+                        <button class="dugme dugme--birincil"
+                                disabled="@string.IsNullOrWhiteSpace(_name)"
+                                @onclick="Save">Kaydet</button>
+                    </div>
+                </div>
+            }
+
+            @if (_resources.Count == 0)
+            {
+                <div class="bos-durum">
+                    <div class="bos-durum__baslik">Tanımlı kaynak yok</div>
+                    <div>Toplantı odalarınızı tanımlayın; etkinlik formunda seçilebilir olurlar.</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var resource in _resources)
+                {
+                    <div class="kaynak-satiri @(resource.IsActive ? "" : "kaynak-satiri--kapali")">
+                        <span aria-hidden="true">@(resource.Kind == ResourceKind.Room ? "🚪" : "📦")</span>
+
+                        <button type="button" class="gorev__baslik" @onclick="() => BeginEdit(resource)">
+                            <span style="display:block">
+                                @resource.Name
+                                @if (resource.Policy == BookingPolicy.RequiresApproval)
+                                {
+                                    <span title="Onaydan geçer" aria-hidden="true"> ⏳</span>
+                                }
+                            </span>
+                            <span style="display:block;font-size:11px;color:var(--metin-3)">
+                                @resource.Summary
+                            </span>
+                        </button>
+
+                        <button class="dugme dugme--sade"
+                                @onclick="() => SetActive(resource.Id, !resource.IsActive)">
+                            @(resource.IsActive ? "Kapat" : "Aç")
+                        </button>
+                    </div>
+                }
+            }
+        </section>
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Onay ya da red sonrası ızgara tazelensin diye.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private static readonly ResourceFeatures[] AllFeatures =
+    [
+        ResourceFeatures.Projector,
+        ResourceFeatures.VideoConference,
+        ResourceFeatures.Whiteboard,
+        ResourceFeatures.Phone,
+        ResourceFeatures.Accessible,
+    ];
+
+    private List<Resource> _resources = [];
+    private List<ResourceBooking> _pending = [];
+
+    private bool _showInactive;
+    private string? _error;
+
+    /// <summary>Düzenlenen kaynağın kimliği; yeni kayıtta <see cref="Guid.Empty"/>.</summary>
+    private Guid? _editing;
+
+    private string _name = string.Empty;
+    private ResourceKind _kind = ResourceKind.Room;
+    private string _location = string.Empty;
+    private int? _capacity;
+    private ResourceFeatures _features;
+    private BookingPolicy _policy = BookingPolicy.AutoAccept;
+    private string _approverChoice = string.Empty;
+
+    // ------------------------------------------------------------------
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var resources = scope.ServiceProvider.GetRequiredService<ResourceService>();
+
+        _resources = await resources.GetAllAsync(_showInactive);
+        _pending = await resources.GetPendingAsync(State.ActiveUserId);
+    }
+
+    private async Task OnShowInactiveToggled(ChangeEventArgs e)
+    {
+        _showInactive = (bool)(e.Value ?? false);
+        await LoadAsync();
+    }
+
+    private string NameOf(Guid userId)
+        => State.Users.FirstOrDefault(u => u.Id == userId)?.DisplayName ?? "(bilinmiyor)";
+
+    private LocalDateTime LocalOf(Instant instant) => State.ToLocal(instant);
+
+    // ------------------------------------------------------------------
+    // Tanımlar
+    // ------------------------------------------------------------------
+
+    private void BeginCreate()
+    {
+        _editing = Guid.Empty;
+        _name = string.Empty;
+        _kind = ResourceKind.Room;
+        _location = string.Empty;
+        _capacity = 8;
+        _features = ResourceFeatures.None;
+        _policy = BookingPolicy.AutoAccept;
+        _approverChoice = string.Empty;
+        _error = null;
+    }
+
+    private void BeginEdit(Resource resource)
+    {
+        if (_editing == resource.Id) { _editing = null; return; }
+
+        _editing = resource.Id;
+        _name = resource.Name;
+        _kind = resource.Kind;
+        _location = resource.Location ?? string.Empty;
+        _capacity = resource.Capacity;
+        _features = resource.Features;
+        _policy = resource.Policy;
+        _approverChoice = resource.ApproverUserId?.ToString() ?? string.Empty;
+        _error = null;
+    }
+
+    private async Task Save()
+    {
+        if (_editing is not { } editing || string.IsNullOrWhiteSpace(_name)) return;
+
+        var input = new ResourceInput
+        {
+            Name = _name,
+            Kind = _kind,
+            Location = string.IsNullOrWhiteSpace(_location) ? null : _location.Trim(),
+            Capacity = _capacity,
+            Features = _features,
+            Policy = _policy,
+            ApproverUserId = Guid.TryParse(_approverChoice, out var approver) ? approver : null,
+        };
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var resources = scope.ServiceProvider.GetRequiredService<ResourceService>();
+
+            if (editing == Guid.Empty) await resources.CreateAsync(input, State.ActiveUserId);
+            else await resources.UpdateAsync(editing, input);
+        }
+
+        _editing = null;
+
+        // Kaynak takvimi de eklenip adlandırıldığı için takvim listesi tazelenir.
+        await State.LoadUserContextAsync();
+        await LoadAsync();
+    }
+
+    private async Task SetActive(Guid resourceId, bool isActive)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ResourceService>()
+                .SetActiveAsync(resourceId, isActive);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task Delete()
+    {
+        if (_editing is not { } editing || editing == Guid.Empty) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ResourceService>().DeleteAsync(editing);
+        }
+
+        _editing = null;
+
+        await State.LoadUserContextAsync();
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Onay
+    // ------------------------------------------------------------------
+
+    private async Task Respond(Guid bookingId, bool accept)
+    {
+        _error = null;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var result = await scope.ServiceProvider.GetRequiredService<ResourceService>()
+                .RespondAsync(bookingId, accept, State.ActiveUserId);
+
+            if (result.Error is { } error) _error = error;
+        }
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+}

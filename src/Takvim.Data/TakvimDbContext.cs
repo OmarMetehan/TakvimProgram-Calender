@@ -25,6 +25,8 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<SavedSearch> SavedSearches => Set<SavedSearch>();
     public DbSet<TaskList> TaskLists => Set<TaskList>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
+    public DbSet<Resource> Resources => Set<Resource>();
+    public DbSet<ResourceBooking> ResourceBookings => Set<ResourceBooking>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -148,6 +150,44 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<Resource>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Location).HasMaxLength(300);
+            e.Property(x => x.Notes).HasMaxLength(2000);
+
+            e.Ignore(x => x.Summary);
+
+            // Kaynak silinirse takvimi de gider; ikisi tek bir şeydir.
+            e.HasOne(x => x.Calendar).WithMany()
+                .HasForeignKey(x => x.CalendarId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.IsActive);
+            e.HasIndex(x => x.CalendarId).IsUnique();
+        });
+
+        modelBuilder.Entity<ResourceBooking>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.ResponseNote).HasMaxLength(500);
+
+            e.HasOne(x => x.Resource).WithMany(r => r.Bookings)
+                .HasForeignKey(x => x.ResourceId).OnDelete(DeleteBehavior.Cascade);
+
+            // Toplantı kalıcı silinirse tutma kaydı da gider.
+            e.HasOne(x => x.Event).WithMany()
+                .HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
+
+            // Aynı kaynak bir toplantıya iki kez tutulamaz.
+            e.HasIndex(x => new { x.ResourceId, x.EventId }).IsUnique();
+
+            // Çakışma sorgusunun dayandığı indeks.
+            e.HasIndex(x => new { x.ResourceId, x.StartUtc, x.EndUtc });
         });
 
         modelBuilder.Entity<TaskList>(e =>

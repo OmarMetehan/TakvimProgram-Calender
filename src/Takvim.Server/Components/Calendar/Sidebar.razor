@@ -76,6 +76,11 @@
             <span class="liste-ogesi__ad">İçe / dışa aktar</span>
         </button>
 
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenResources.InvokeAsync()">
+            <span aria-hidden="true">🚪</span>
+            <span class="liste-ogesi__ad">Odalar ve ekipman</span>
+        </button>
+
         <button type="button" class="liste-ogesi" @onclick="() => OnOpenTasks.InvokeAsync()">
             <span aria-hidden="true">✓</span>
             <span class="liste-ogesi__ad">Görevler</span>
@@ -111,6 +116,7 @@
     [Parameter] public EventCallback OnOpenWorkSchedule { get; set; }
     [Parameter] public EventCallback OnOpenCalDav { get; set; }
     [Parameter] public EventCallback OnOpenTasks { get; set; }
+    [Parameter] public EventCallback OnOpenResources { get; set; }
 
     private Task OnDateSelected(LocalDate date)
     {

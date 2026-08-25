@@ -1,0 +1,319 @@
+@* Toplantıya oda ve ekipman tutma. *@
+
+<div>
+    <span class="etiket">Odalar ve ekipman</span>
+
+    @if (_booked.Count > 0)
+    {
+        @foreach (var booking in _booked)
+        {
+            <div class="kaynak-satiri">
+                <span aria-hidden="true">@(booking.Resource.Kind == ResourceKind.Room ? "🚪" : "📦")</span>
+
+                <span style="flex:1;min-width:0">
+                    <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        @booking.Resource.Name
+                    </span>
+                    <span style="display:block;font-size:11px;color:var(--metin-3)">
+                        @booking.Resource.Summary
+                    </span>
+                </span>
+
+                <span class="yanit @StatusClass(booking.Status)">@StatusLabel(booking.Status)</span>
+
+                <button class="dugme dugme--simge dugme--tehlike" title="Kaldır"
+                        aria-label="@($"{booking.Resource.Name} rezervasyonunu kaldır")"
+                        @onclick="() => Remove(booking.Resource.Id)">✕</button>
+            </div>
+        }
+    }
+
+    @if (_error is { } error)
+    {
+        <div role="alert" style="color:var(--tehlike);font-size:12px;margin:4px 0">@error</div>
+    }
+
+    @if (_searching)
+    {
+        <div class="kaynak-arama">
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px">
+                <input class="alan" placeholder="Ad veya konum" aria-label="Kaynak ara"
+                       @bind="_term" @bind:event="oninput" @onkeydown="OnSearchKey" />
+
+                <select class="alan" style="width:120px" aria-label="Tür" @bind="KindChoice">
+                    <option value="">Hepsi</option>
+                    <option value="@ResourceKind.Room">Oda</option>
+                    <option value="@ResourceKind.Equipment">Ekipman</option>
+                </select>
+
+                <button class="dugme" @onclick="Search">Ara</button>
+            </div>
+
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
+                @foreach (var feature in Features)
+                {
+                    var selected = _requiredFeatures.HasFlag(feature);
+
+                    <button type="button" class="rozet"
+                            style="border:1px solid @(selected ? "var(--birincil)" : "var(--cizgi)")"
+                            aria-pressed="@(selected ? "true" : "false")"
+                            @onclick="() => ToggleFeature(feature)">
+                        @Resource.FeatureName(feature)
+                    </button>
+                }
+
+                @if (AttendeeCount > 0)
+                {
+                    <label class="rozet" style="border:1px solid @(_matchCapacity ? "var(--birincil)" : "var(--cizgi)")">
+                        <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                               checked="@_matchCapacity"
+                               @onchange="e => _matchCapacity = (bool)(e.Value ?? false)" />
+                        En az @AttendeeCount kişilik
+                    </label>
+                }
+            </div>
+
+            @if (_results.Count == 0)
+            {
+                <div style="font-size:12px;color:var(--metin-3);margin-top:8px">
+                    @(_searched ? "Ölçütlere uyan kaynak yok." : "Aramak için Ara'ya basın.")
+                </div>
+            }
+            else
+            {
+                <div style="margin-top:8px;max-height:220px;overflow-y:auto">
+                    @foreach (var candidate in _results)
+                    {
+                        <button type="button" class="kaynak-aday @(candidate.IsFree ? "" : "kaynak-aday--dolu")"
+                                disabled="@(!candidate.IsFree)"
+                                title="@(candidate.IsFree ? "Tutmak için tıklayın" : $"Dolu: {candidate.ConflictTitle}")"
+                                @onclick="() => Add(candidate.Resource.Id)">
+
+                            <span aria-hidden="true">@(candidate.Resource.Kind == ResourceKind.Room ? "🚪" : "📦")</span>
+
+                            <span style="flex:1;min-width:0;text-align:left">
+                                <span style="display:block">@candidate.Resource.Name</span>
+                                <span style="display:block;font-size:11px;color:var(--metin-3)">
+                                    @candidate.Resource.Summary
+                                </span>
+                            </span>
+
+                            @if (!candidate.IsFree)
+                            {
+                                <span class="yanit yanit--ret">dolu</span>
+                            }
+                            else if (candidate.NeedsApproval)
+                            {
+                                <span class="yanit yanit--belirsiz">onay gerekir</span>
+                            }
+                            else
+                            {
+                                <span class="yanit yanit--kabul">boş</span>
+                            }
+                        </button>
+                    }
+                </div>
+            }
+
+            <button class="dugme dugme--sade" style="margin-top:6px"
+                    @onclick="() => _searching = false">Kapat</button>
+        </div>
+    }
+    else
+    {
+        <button class="dugme dugme--sade" @onclick="BeginSearch">🚪 Oda veya ekipman ekle</button>
+
+        @if (_booked.Count == 0)
+        {
+            <div style="font-size:11px;color:var(--metin-3);margin-top:4px">
+                Uygunluk, formda seçili saate göre gösterilir.
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter, EditorRequired] public required EventDraft Draft { get; set; }
+
+    /// <summary>Kapasite önerisi için katılımcı sayısı (organizatör dahil).</summary>
+    private int AttendeeCount => Draft.Attendees.Count > 0 ? Draft.Attendees.Count + 1 : 0;
+
+    private static readonly ResourceFeatures[] Features =
+    [
+        ResourceFeatures.Projector,
+        ResourceFeatures.VideoConference,
+        ResourceFeatures.Whiteboard,
+        ResourceFeatures.Phone,
+        ResourceFeatures.Accessible,
+    ];
+
+    /// <summary>Taslakta seçili kaynaklar, gösterime hazır hâlleriyle.</summary>
+    private sealed record BookedResource(Resource Resource, ResourceBookingStatus Status);
+
+    private List<BookedResource> _booked = [];
+    private List<ResourceAvailability> _results = [];
+
+    private bool _searching;
+    private bool _searched;
+    private string _term = string.Empty;
+    private ResourceKind? _kind;
+    private ResourceFeatures _requiredFeatures;
+    private bool _matchCapacity = true;
+    private string? _error;
+
+    private Guid? _loadedFor;
+
+    private string KindChoice
+    {
+        get => _kind?.ToString() ?? string.Empty;
+        set => _kind = Enum.TryParse<ResourceKind>(value, out var parsed) ? parsed : null;
+    }
+
+    // ------------------------------------------------------------------
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Draft.EventId == _loadedFor) return;
+
+        _loadedFor = Draft.EventId;
+        await LoadAsync();
+    }
+
+    /// <summary>
+    /// Var olan bir toplantı açıldığında tutulmuş kaynaklar taslağa yüklenir.
+    /// Yeni toplantıda liste boş başlar; seçim kaydetmeye kadar taslakta durur.
+    /// </summary>
+    private async Task LoadAsync()
+    {
+        if (Draft.EventId is not { } eventId)
+        {
+            await RefreshBookedAsync();
+            return;
+        }
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var resources = scope.ServiceProvider.GetRequiredService<ResourceService>();
+
+        var bookings = await resources.GetForEventAsync(eventId);
+
+        Draft.ResourceIds = [.. bookings
+            .Where(b => b.Status != ResourceBookingStatus.Declined && b.Resource is not null)
+            .Select(b => b.ResourceId)];
+
+        _booked = [.. bookings
+            .Where(b => b.Status != ResourceBookingStatus.Declined && b.Resource is not null)
+            .Select(b => new BookedResource(b.Resource!, b.Status))];
+    }
+
+    /// <summary>Taslaktaki kimlikleri gösterilebilir kayıtlara çevirir.</summary>
+    private async Task RefreshBookedAsync()
+    {
+        if (Draft.ResourceIds.Count == 0)
+        {
+            _booked = [];
+            return;
+        }
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var resources = scope.ServiceProvider.GetRequiredService<ResourceService>();
+
+        var all = await resources.GetAllAsync(includeInactive: true);
+
+        _booked = [.. all
+            .Where(r => Draft.ResourceIds.Contains(r.Id))
+            .Select(r => new BookedResource(r, StatusOf(r)))];
+    }
+
+    /// <summary>
+    /// Kaydedilmemiş bir seçimin durumu, kaynağın politikasından okunur:
+    /// gerçek durum ancak kaydettikten sonra belli olur.
+    /// </summary>
+    private static ResourceBookingStatus StatusOf(Resource resource)
+        => resource.Policy == BookingPolicy.RequiresApproval
+            ? ResourceBookingStatus.Requested
+            : ResourceBookingStatus.Accepted;
+
+    // ------------------------------------------------------------------
+
+    private async Task BeginSearch()
+    {
+        _searching = true;
+
+        if (!_searched) await Search();
+    }
+
+    private async Task OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Search();
+    }
+
+    private void ToggleFeature(ResourceFeatures feature)
+        => _requiredFeatures ^= feature;
+
+    private async Task Search()
+    {
+        _error = null;
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var resources = scope.ServiceProvider.GetRequiredService<ResourceService>();
+
+        var (from, to) = Range();
+
+        _results = await resources.FindAvailableAsync(from, to, new ResourceQuery
+        {
+            Kind = _kind,
+            Term = string.IsNullOrWhiteSpace(_term) ? null : _term,
+            RequiredFeatures = _requiredFeatures,
+            MinimumCapacity = _matchCapacity && AttendeeCount > 0 ? AttendeeCount : null,
+        }, Draft.EventId);
+
+        // Zaten seçilmiş olanlar listeden çıkar.
+        _results = [.. _results.Where(r => !Draft.ResourceIds.Contains(r.Resource.Id))];
+        _searched = true;
+    }
+
+    private (Instant From, Instant To) Range()
+    {
+        var zoneId = Draft.StartTimeZoneId ?? State.ZoneId;
+
+        return (State.ToInstant(Draft.Start, zoneId),
+                State.ToInstant(Draft.End, Draft.EndTimeZoneId ?? zoneId));
+    }
+
+    private async Task Add(Guid resourceId)
+    {
+        if (!Draft.ResourceIds.Contains(resourceId)) Draft.ResourceIds.Add(resourceId);
+
+        _results = [.. _results.Where(r => r.Resource.Id != resourceId)];
+
+        await RefreshBookedAsync();
+    }
+
+    private async Task Remove(Guid resourceId)
+    {
+        Draft.ResourceIds.Remove(resourceId);
+
+        await RefreshBookedAsync();
+        if (_searching) await Search();
+    }
+
+    // ------------------------------------------------------------------
+
+    private static string StatusLabel(ResourceBookingStatus status) => status switch
+    {
+        ResourceBookingStatus.Accepted => "tutuldu",
+        ResourceBookingStatus.Requested => "onay bekliyor",
+        _ => "reddedildi",
+    };
+
+    private static string StatusClass(ResourceBookingStatus status) => status switch
+    {
+        ResourceBookingStatus.Accepted => "yanit--kabul",
+        ResourceBookingStatus.Requested => "yanit--belirsiz",
+        _ => "yanit--ret",
+    };
+}

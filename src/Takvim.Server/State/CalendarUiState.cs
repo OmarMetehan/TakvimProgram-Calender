@@ -186,6 +186,15 @@ public sealed class CalendarUiState(
         }
     }
 
+    /// <summary>Yerel bir saati ana çevirir; bileşenler zaman dilimi servisine
+    /// doğrudan erişmesin diye buradan geçer.</summary>
+    public Instant ToInstant(LocalDateTime value, string? zoneId = null)
+        => timeZones.ToInstant(value, zoneId ?? ZoneId);
+
+    /// <summary>Anı kullanıcının zaman dilimindeki yerel saate çevirir.</summary>
+    public LocalDateTime ToLocal(Instant instant, string? zoneId = null)
+        => timeZones.ToLocal(instant, zoneId ?? ZoneId);
+
     public Instant RangeStartUtc => timeZones.ToInstant(View.RangeStart.AtMidnight(), ZoneId);
 
     public Instant RangeEndUtc => timeZones.ToInstant(View.RangeEnd.AtMidnight(), ZoneId);
