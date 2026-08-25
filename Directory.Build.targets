@@ -14,12 +14,18 @@
 
     Bu, Smart App Control'ün çözümü değil, geçici çaresidir: kalıcı çözüm
     ayarın kapatılmasıdır (Windows Güvenliği > Uygulama ve tarayıcı denetimi).
-    Yayın derlemesi deterministik ve sabit sürümlü kalır.
+
+    Yayın derlemesi de kapsam içindedir. Başta yalnızca hata ayıklama
+    derlemeleri kapsanmıştı, ama engel yayın derlemesine de vurdu ve orada
+    "yeniden derle" hiç işe yaramadı: deterministik derleme aynı kaynaktan
+    aynı karmayı üretiyor, engellenen karma sonsuza kadar geri geliyordu.
+    Bu program dağıtılmıyor, yalnızca bu makinede çalışıyor; yeniden
+    üretilebilirliğin burada pratik bir karşılığı yok, çalışabilmenin ise var.
 
     Bu dosya Directory.Build.props değil .targets olmalı: $(Configuration)
     ancak ortak hedefler içe aktarıldıktan sonra değerine kavuşur.
   -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug' AND '$(OS)' == 'Windows_NT'">
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
     <Deterministic>false</Deterministic>
     <FileVersion>$([System.DateTime]::UtcNow.ToString("yyMM")).$([System.DateTime]::UtcNow.ToString("ddHH")).$([System.DateTime]::UtcNow.ToString("mmss")).0</FileVersion>
   </PropertyGroup>
