@@ -1,0 +1,340 @@
+@* Kategori yönetimi: açma, adlandırma, renklendirme, gizleme, sıralama, silme. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel" role="dialog" aria-modal="true" aria-label="Kategoriler">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Kategoriler</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        <p style="color:var(--metin-2);margin:0">
+            Kategoriler takvimlerden bağımsızdır: bir etkinlik tek bir takvime ait
+            olur ama birden çok kategori taşıyabilir.
+        </p>
+
+        @if (_error is { } error)
+        {
+            <div role="alert" style="color:var(--tehlike);font-size:12px">@error</div>
+        }
+
+        @* ---------- Düzenleme formu ---------- *@
+
+        @if (_editing is not null)
+        {
+            <div class="kaynak-arama">
+                <label class="etiket" for="kt-ad">Ad</label>
+                <input id="kt-ad" class="alan" placeholder="Toplantı"
+                       @bind="_name" @bind:event="oninput" @onkeydown="OnNameKey" />
+
+                <div style="margin-top:8px">
+                    <span class="etiket">Renk</span>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        @foreach (var color in Palette)
+                        {
+                            <button type="button" class="renk-noktasi renk-@color"
+                                    style="width:26px;height:26px;border-radius:50%;
+                                           border:2px solid @(_color == color ? "var(--metin)" : "transparent")"
+                                    title="@color" aria-label="@color rengi"
+                                    aria-pressed="@(_color == color ? "true" : "false")"
+                                    @onclick="() => _color = color"></button>
+                        }
+                    </div>
+                </div>
+
+                <label class="liste-ogesi" style="padding-left:0;margin-top:8px">
+                    <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                           checked="@_isPrivate"
+                           @onchange="e => _isPrivate = (bool)(e.Value ?? false)" />
+                    <span class="liste-ogesi__ad">
+                        Gizli kategori
+                        <span style="display:block;font-size:11px;color:var(--metin-3)">
+                            Bu kategoriyi taşıyan etkinlikler, takviminiz tümüyle
+                            paylaşılmış olsa bile karşı tarafta yalnızca "meşgul"
+                            görünür. Vekiller de göremez — açıkça izin verilmedikçe.
+                        </span>
+                    </span>
+                </label>
+
+                <div style="display:flex;gap:6px;margin-top:10px">
+                    <span class="panel__bosluk"></span>
+                    <button class="dugme" @onclick="() => _editing = null">Vazgeç</button>
+                    <button class="dugme dugme--birincil"
+                            disabled="@string.IsNullOrWhiteSpace(_name)"
+                            @onclick="Save">Kaydet</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <button class="dugme dugme--birincil" @onclick="BeginCreate">+ Yeni kategori</button>
+        }
+
+        @* ---------- Liste ---------- *@
+
+        @if (_categories.Count == 0)
+        {
+            <div class="bos-durum">
+                <div class="bos-durum__baslik">Kategori yok</div>
+                <div>Etkinliklerinizi etiketlemek için bir kategori açın.</div>
+            </div>
+        }
+        else
+        {
+            @foreach (var (category, index) in _categories.Select((c, i) => (c, i)))
+            {
+                <div class="kaynak-satiri renk-@category.Color">
+                    <span class="renk-noktasi"></span>
+
+                    <span style="flex:1;min-width:0">
+                        <span style="display:block;font-weight:500">
+                            @category.Name
+                            @if (category.IsPrivate)
+                            {
+                                <span title="Paylaşımlarda gizlenir" aria-label="Gizli kategori">🔒</span>
+                            }
+                        </span>
+
+                        <span style="display:block;font-size:11px;color:var(--metin-3)">
+                            @UsageLabel(category.Id)
+                        </span>
+                    </span>
+
+                    <button class="dugme dugme--simge" title="Yukarı taşı" aria-label="Yukarı taşı"
+                            disabled="@(index == 0)" @onclick="() => Move(index, -1)">↑</button>
+
+                    <button class="dugme dugme--simge" title="Aşağı taşı" aria-label="Aşağı taşı"
+                            disabled="@(index == _categories.Count - 1)"
+                            @onclick="() => Move(index, 1)">↓</button>
+
+                    <button class="dugme dugme--sade" @onclick="() => BeginEdit(category)">Düzenle</button>
+
+                    <button class="dugme dugme--simge dugme--tehlike" title="Sil"
+                            aria-label="@($"{category.Name} kategorisini sil")"
+                            @onclick="() => AskDelete(category)">✕</button>
+                </div>
+            }
+        }
+
+        @* ---------- Silme onayı ---------- *@
+
+        @if (_deleting is { } target)
+        {
+            <div class="kaynak-arama" style="border-color:var(--tehlike)">
+                <div style="font-weight:500;margin-bottom:6px">"@target.Name" silinsin mi?</div>
+
+                <div style="color:var(--metin-2);font-size:13px;margin-bottom:8px">
+                    @if (_deletingUsage > 0)
+                    {
+                        <div>@_deletingUsage etkinlikten bu etiket kalkacak.</div>
+                    }
+
+                    <div>Etkinlikler silinmez; yalnızca etiketleri düşer.</div>
+
+                    @if (target.IsPrivate && _deletingUsage > 0)
+                    {
+                        <div style="color:var(--uyari);margin-top:4px">
+                            Bu gizli bir kategori. Silindikten sonra o etkinlikler,
+                            kendi görünürlük ayarları izin veriyorsa paylaşımlarda
+                            görünür hâle gelir.
+                        </div>
+                    }
+                </div>
+
+                <div style="display:flex;gap:6px">
+                    <span class="panel__bosluk"></span>
+                    <button class="dugme" @onclick="() => _deleting = null">Vazgeç</button>
+                    <button class="dugme dugme--tehlike" @onclick="ConfirmDelete">Sil</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Kategori listesi değişince ızgara tazelensin diye.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private static readonly string[] Palette =
+        ["tomato", "flamingo", "tangerine", "banana", "sage", "basil",
+         "peacock", "blueberry", "lavender", "grape", "graphite"];
+
+    private List<Category> _categories = [];
+
+    /// <summary>Kategori başına kaç etkinlik; listede gösterilir.</summary>
+    private Dictionary<Guid, int> _usage = [];
+
+    /// <summary>Düzenlenen kategorinin kimliği; yeni kayıtta <see cref="Guid.Empty"/>.</summary>
+    private Guid? _editing;
+
+    private Category? _deleting;
+    private int _deletingUsage;
+    private string? _error;
+
+    private string _name = string.Empty;
+    private string _color = "graphite";
+    private bool _isPrivate;
+
+    // ------------------------------------------------------------------
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var categories = scope.ServiceProvider.GetRequiredService<CategoryService>();
+
+        _categories = await categories.GetOwnAsync(State.ActiveUserId);
+
+        _usage = [];
+        foreach (var category in _categories)
+        {
+            _usage[category.Id] = await categories.GetUsageAsync(category.Id);
+        }
+    }
+
+    private string UsageLabel(Guid categoryId)
+        => _usage.GetValueOrDefault(categoryId) switch
+        {
+            0 => "hiç kullanılmamış",
+            1 => "1 etkinlikte",
+            var count => $"{count} etkinlikte",
+        };
+
+    private void BeginCreate()
+    {
+        _editing = Guid.Empty;
+        _error = null;
+
+        _name = string.Empty;
+        _color = NextColor();
+        _isPrivate = false;
+    }
+
+    /// <summary>Kullanılmamış bir renk seçer; iki kategori aynı renkte başlamasın.</summary>
+    private string NextColor()
+    {
+        var used = _categories.Select(c => c.Color).ToHashSet(StringComparer.Ordinal);
+
+        return Array.Find(Palette, color => !used.Contains(color)) ?? "graphite";
+    }
+
+    private void BeginEdit(Category category)
+    {
+        if (_editing == category.Id) { _editing = null; return; }
+
+        _editing = category.Id;
+        _error = null;
+
+        _name = category.Name;
+        _color = category.Color;
+        _isPrivate = category.IsPrivate;
+    }
+
+    private async Task OnNameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Save();
+        else if (e.Key == "Escape") _editing = null;
+    }
+
+    private async Task Save()
+    {
+        if (_editing is not { } editing || string.IsNullOrWhiteSpace(_name)) return;
+
+        var input = new CategoryInput { Name = _name, Color = _color, IsPrivate = _isPrivate };
+
+        _error = null;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var categories = scope.ServiceProvider.GetRequiredService<CategoryService>();
+
+            if (editing == Guid.Empty)
+            {
+                try
+                {
+                    await categories.CreateAsync(State.ActiveUserId, input);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _error = ex.Message;
+                    return;
+                }
+            }
+            else
+            {
+                _error = await categories.UpdateAsync(editing, input);
+                if (_error is not null) return;
+            }
+        }
+
+        _editing = null;
+        await AfterChangeAsync();
+    }
+
+    private async Task Move(int index, int delta)
+    {
+        var target = index + delta;
+        if (target < 0 || target >= _categories.Count) return;
+
+        (_categories[index], _categories[target]) = (_categories[target], _categories[index]);
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<CategoryService>()
+                .ReorderAsync(State.ActiveUserId, [.. _categories.Select(c => c.Id)]);
+        }
+
+        await AfterChangeAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Silme
+    // ------------------------------------------------------------------
+
+    private void AskDelete(Category category)
+    {
+        _deleting = category;
+        _deletingUsage = _usage.GetValueOrDefault(category.Id);
+        _error = null;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_deleting is not { } target) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<CategoryService>().DeleteAsync(target.Id);
+        }
+
+        _deleting = null;
+        await AfterChangeAsync();
+    }
+
+    /// <summary>
+    /// Kategori listesi ve ızgara birlikte tazelenir: gizlilik değişmiş
+    /// olabilir ve o, görünen etkinlikleri anında etkiler.
+    /// </summary>
+    private async Task AfterChangeAsync()
+    {
+        await State.LoadUserContextAsync();
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+}

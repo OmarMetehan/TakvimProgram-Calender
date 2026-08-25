@@ -48,6 +48,9 @@
                 <button class="dugme dugme--sade" style="height:20px;font-size:11px;padding:0 6px"
                         @onclick="ClearCategories">Temizle</button>
             }
+            <button class="dugme dugme--sade" style="height:20px;font-size:11px;padding:0 6px"
+                    title="Kategori ekle veya düzenle" aria-label="Kategorileri yönet"
+                    @onclick="() => OnManageCategories.InvokeAsync()">Yönet</button>
         </h2>
 
         @foreach (var category in State.Categories)
@@ -145,6 +148,7 @@
     [Parameter] public EventCallback OnOpenSubscriptions { get; set; }
     [Parameter] public EventCallback OnOpenMail { get; set; }
     [Parameter] public EventCallback OnManageCalendars { get; set; }
+    [Parameter] public EventCallback OnManageCategories { get; set; }
 
     /// <summary>Bekleyen e-posta önerisi sayısı; sıfırsa rozet gösterilmez.</summary>
     [Parameter] public int ProposalCount { get; set; }
