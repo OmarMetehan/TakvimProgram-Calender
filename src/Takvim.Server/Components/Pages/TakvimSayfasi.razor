@@ -29,7 +29,8 @@
                  OnOpenAppointments="() => _panel = Panel.Appointments"
                  OnOpenSubscriptions="() => _panel = Panel.Subscriptions"
                  OnOpenMail="() => _panel = Panel.Mail"
-                 ProposalCount="_proposalCount" />
+                 ProposalCount="_proposalCount"
+                 OnManageCalendars="() => _panel = Panel.Calendars" />
 
         <main class="icerik">
             @if (State.IsLoading)
@@ -93,6 +94,11 @@
                      OnAcceptProposal="AcceptProposal"
                      OnResetResponses="ResetResponses"
                      OnCancel="CloseAll" />
+    }
+
+    @if (_panel == Panel.Calendars)
+    {
+        <CalendarPanel OnClose="CloseAll" OnChanged="() => State.ReloadAsync()" />
     }
 
     @if (_panel == Panel.Mail)
@@ -205,7 +211,7 @@
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
     [Inject] public required IJSRuntime Js { get; set; }
 
-    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search, Tasks, Resources, Appointments, Subscriptions, Mail }
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search, Tasks, Resources, Appointments, Subscriptions, Mail, Calendars }
 
     private Panel _panel = Panel.None;
 

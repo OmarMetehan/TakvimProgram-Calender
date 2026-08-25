@@ -105,12 +105,17 @@
         int removed;
         await using (var scope = Scopes.CreateAsyncScope())
         {
-            var events = scope.ServiceProvider.GetRequiredService<EventService>();
-            removed = await events.PurgeTrashAsync();
+            var provider = scope.ServiceProvider;
+
+            // Çöp kutusu tek bir yer değil: etkinlikler, görevler ve takvimler
+            // ayrı saklanır ama saklama süresi aynıdır ve hepsi burada dolar.
+            removed = await provider.GetRequiredService<EventService>().PurgeTrashAsync();
+            removed += await provider.GetRequiredService<TaskService>().PurgeTrashAsync();
+            removed += await provider.GetRequiredService<CalendarService>().PurgeTrashAsync();
 
             // Etkinlik gidince ek kayıtları da gider ama dosyalar diskte kalır;
             // tek toplandıkları yer burası.
-            await scope.ServiceProvider.GetRequiredService<AttachmentService>().PurgeOrphansAsync();
+            await provider.GetRequiredService<AttachmentService>().PurgeOrphansAsync();
         }
 
         await LoadAsync();

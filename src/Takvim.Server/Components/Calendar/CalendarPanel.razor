@@ -1,0 +1,458 @@
+@* Takvim yönetimi: açma, adlandırma, renklendirme, sıralama, silme. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel panel--genis" role="dialog" aria-modal="true" aria-label="Takvimlerim">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Takvimlerim</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        @if (_error is { } error)
+        {
+            <div role="alert" style="color:var(--tehlike);font-size:12px">@error</div>
+        }
+
+        @* ---------- Düzenleme formu ---------- *@
+
+        @if (_editing is not null)
+        {
+            <div class="kaynak-arama">
+                <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
+                    <div>
+                        <label class="etiket" for="tk-ad">Ad</label>
+                        <input id="tk-ad" class="alan" placeholder="Proje takvimi"
+                               @bind="_name" @bind:event="oninput" @onkeydown="OnNameKey" />
+                    </div>
+
+                    <div>
+                        <label class="etiket" for="tk-dilim">Zaman dilimi</label>
+                        <select id="tk-dilim" class="alan" style="width:180px" @bind="_zoneId">
+                            @foreach (var zone in CommonZones)
+                            {
+                                <option value="@zone">@zone</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top:8px">
+                    <span class="etiket">Renk</span>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        @foreach (var color in Palette)
+                        {
+                            <button type="button" class="renk-noktasi renk-@color"
+                                    style="width:26px;height:26px;border-radius:50%;
+                                           border:2px solid @(_color == color ? "var(--metin)" : "transparent")"
+                                    title="@color" aria-label="@color rengi"
+                                    aria-pressed="@(_color == color ? "true" : "false")"
+                                    @onclick="() => _color = color"></button>
+                        }
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+                    <div>
+                        <label class="etiket" for="tk-hatirlatici">Varsayılan hatırlatıcı</label>
+                        <select id="tk-hatirlatici" class="alan" @bind="_reminder">
+                            <option value="">Yok</option>
+                            @foreach (var minutes in ReminderChoices)
+                            {
+                                <option value="@minutes">@TurkishFormat.ReminderOffset(minutes)</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="etiket" for="tk-tumgun">Tüm gün için</label>
+                        <select id="tk-tumgun" class="alan" @bind="_allDayReminder">
+                            <option value="">Yok</option>
+                            @foreach (var minutes in AllDayReminderChoices)
+                            {
+                                <option value="@minutes">@TurkishFormat.ReminderOffset(minutes)</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top:6px">
+                    <label class="etiket" for="tk-aciklama">Açıklama</label>
+                    <input id="tk-aciklama" class="alan" placeholder="İsteğe bağlı"
+                           @bind="_description" @bind:event="oninput" />
+                </div>
+
+                <div style="display:flex;gap:6px;margin-top:10px">
+                    <span class="panel__bosluk"></span>
+                    <button class="dugme" @onclick="() => _editing = null">Vazgeç</button>
+                    <button class="dugme dugme--birincil"
+                            disabled="@string.IsNullOrWhiteSpace(_name)"
+                            @onclick="Save">Kaydet</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <button class="dugme dugme--birincil" @onclick="BeginCreate">+ Yeni takvim</button>
+        }
+
+        @* ---------- Liste ---------- *@
+
+        <section>
+            @foreach (var (calendar, index) in _calendars.Select((c, i) => (c, i)))
+            {
+                var managed = ManagedElsewhere(calendar.Kind);
+
+                <div class="kaynak-satiri renk-@calendar.Color">
+                    <span class="renk-noktasi"></span>
+
+                    <span style="flex:1;min-width:0">
+                        <span style="display:block;font-weight:500">
+                            @calendar.Name
+                            @if (calendar.IsReadOnly)
+                            {
+                                <span class="rozet">salt okunur</span>
+                            }
+                        </span>
+
+                        <span style="display:block;font-size:11px;color:var(--metin-3)">
+                            @KindLabel(calendar.Kind) · @calendar.TimeZoneId
+                            @if (managed is not null)
+                            {
+                                <span> · @managed</span>
+                            }
+                        </span>
+                    </span>
+
+                    @* Sıralama; sürükleme yerine iki düğme — daha az şey ters gider. *@
+                    <button class="dugme dugme--simge" title="Yukarı taşı" aria-label="Yukarı taşı"
+                            disabled="@(index == 0)" @onclick="() => Move(index, -1)">↑</button>
+
+                    <button class="dugme dugme--simge" title="Aşağı taşı" aria-label="Aşağı taşı"
+                            disabled="@(index == _calendars.Count - 1)" @onclick="() => Move(index, 1)">↓</button>
+
+                    @if (managed is null)
+                    {
+                        <button class="dugme dugme--sade" @onclick="() => BeginEdit(calendar)">Düzenle</button>
+
+                        <button class="dugme dugme--simge dugme--tehlike" title="Sil"
+                                aria-label="@($"{calendar.Name} takvimini sil")"
+                                @onclick="() => AskDelete(calendar)">✕</button>
+                    }
+                </div>
+            }
+        </section>
+
+        @* ---------- Silme onayı ---------- *@
+
+        @if (_deleting is { } target)
+        {
+            <div class="kaynak-arama" style="border-color:var(--tehlike)">
+                <div style="font-weight:500;margin-bottom:6px">"@target.Name" silinsin mi?</div>
+
+                <div style="color:var(--metin-2);font-size:13px;margin-bottom:8px">
+                    @if (_usage is { } usage)
+                    {
+                        <div>@usage.EventCount etkinlik takvimle birlikte çöp kutusuna gidecek.</div>
+
+                        @if (usage.ShareCount > 0)
+                        {
+                            <div>@usage.ShareCount kişiyle paylaşılmış; erişimlerini kaybedecekler.</div>
+                        }
+                    }
+
+                    <div style="margin-top:4px">
+                        30 gün içinde geri alabilirsiniz.
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:6px">
+                    <span class="panel__bosluk"></span>
+                    <button class="dugme" @onclick="() => _deleting = null">Vazgeç</button>
+                    <button class="dugme dugme--tehlike" @onclick="ConfirmDelete">Sil</button>
+                </div>
+            </div>
+        }
+
+        @* ---------- Çöp kutusu ---------- *@
+
+        @if (_deleted.Count > 0)
+        {
+            <details>
+                <summary style="cursor:pointer;font-size:13px;color:var(--metin-2)">
+                    Silinen takvimler (@_deleted.Count)
+                </summary>
+
+                <div style="margin-top:6px">
+                    @foreach (var calendar in _deleted)
+                    {
+                        <div class="kaynak-satiri renk-@calendar.Color" style="opacity:.7">
+                            <span class="renk-noktasi"></span>
+
+                            <span style="flex:1;min-width:0">
+                                <span style="display:block">@calendar.Name</span>
+                                <span style="display:block;font-size:11px;color:var(--metin-3)">
+                                    @RemainingLabel(calendar)
+                                </span>
+                            </span>
+
+                            <button class="dugme" @onclick="() => Restore(calendar.Id)">Geri al</button>
+                        </div>
+                    }
+                </div>
+            </details>
+        }
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Takvim listesi değişince ızgara tazelensin diye.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private static readonly string[] Palette =
+        ["tomato", "flamingo", "tangerine", "banana", "sage", "basil",
+         "peacock", "blueberry", "lavender", "grape", "graphite"];
+
+    private static readonly int[] ReminderChoices = [0, 5, 10, 15, 30, 60, 120, 24 * 60];
+
+    private static readonly int[] AllDayReminderChoices = [0, 9 * 60, 12 * 60, 18 * 60, 24 * 60];
+
+    /// <summary>Kısa liste; tam liste yüzlerce satırdır.</summary>
+    private static readonly string[] CommonZones =
+    [
+        "Europe/Istanbul", "Europe/London", "Europe/Berlin", "Europe/Paris", "Europe/Moscow",
+        "America/New_York", "America/Chicago", "America/Los_Angeles",
+        "Asia/Dubai", "Asia/Tokyo", "Asia/Shanghai", "Asia/Kolkata", "UTC",
+    ];
+
+    private List<Calendar> _calendars = [];
+    private List<Calendar> _deleted = [];
+
+    /// <summary>Düzenlenen takvimin kimliği; yeni kayıtta <see cref="Guid.Empty"/>.</summary>
+    private Guid? _editing;
+
+    private Calendar? _deleting;
+    private CalendarUsage? _usage;
+    private string? _error;
+
+    private string _name = string.Empty;
+    private string _color = "peacock";
+    private string _description = string.Empty;
+    private string _zoneId = Takvim.Core.Time.TimeZoneService.DefaultZoneId;
+    private string _reminder = "10";
+    private string _allDayReminder = "720";
+
+    // ------------------------------------------------------------------
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var calendars = scope.ServiceProvider.GetRequiredService<CalendarService>();
+
+        _calendars = await calendars.GetOwnAsync(State.ActiveUserId);
+        _deleted = await calendars.GetDeletedAsync(State.ActiveUserId);
+    }
+
+    private void BeginCreate()
+    {
+        _editing = Guid.Empty;
+        _error = null;
+
+        _name = string.Empty;
+        _color = NextColor();
+        _description = string.Empty;
+        _zoneId = State.ZoneId;
+        _reminder = "10";
+        _allDayReminder = "720";
+    }
+
+    /// <summary>Kullanılmamış bir renk seçer; iki takvim aynı renkte başlamasın.</summary>
+    private string NextColor()
+    {
+        var used = _calendars.Select(c => c.Color).ToHashSet(StringComparer.Ordinal);
+
+        return Array.Find(Palette, color => !used.Contains(color)) ?? "peacock";
+    }
+
+    private void BeginEdit(Calendar calendar)
+    {
+        if (_editing == calendar.Id) { _editing = null; return; }
+
+        _editing = calendar.Id;
+        _error = null;
+
+        _name = calendar.Name;
+        _color = calendar.Color;
+        _description = calendar.Description ?? string.Empty;
+        _zoneId = calendar.TimeZoneId;
+        _reminder = calendar.DefaultReminderMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        _allDayReminder = calendar.DefaultAllDayReminderMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+    }
+
+    private async Task OnNameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Save();
+        else if (e.Key == "Escape") _editing = null;
+    }
+
+    private async Task Save()
+    {
+        if (_editing is not { } editing || string.IsNullOrWhiteSpace(_name)) return;
+
+        var input = new CalendarInput
+        {
+            Name = _name,
+            Color = _color,
+            Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(),
+            TimeZoneId = _zoneId,
+            DefaultReminderMinutes = ParseMinutes(_reminder),
+            DefaultAllDayReminderMinutes = ParseMinutes(_allDayReminder),
+        };
+
+        _error = null;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var calendars = scope.ServiceProvider.GetRequiredService<CalendarService>();
+
+            if (editing == Guid.Empty)
+            {
+                try
+                {
+                    await calendars.CreateAsync(State.ActiveUserId, input);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _error = ex.Message;
+                    return;
+                }
+            }
+            else
+            {
+                _error = await calendars.UpdateAsync(editing, input);
+                if (_error is not null) return;
+            }
+        }
+
+        _editing = null;
+        await AfterChangeAsync();
+    }
+
+    private async Task Move(int index, int delta)
+    {
+        var target = index + delta;
+        if (target < 0 || target >= _calendars.Count) return;
+
+        (_calendars[index], _calendars[target]) = (_calendars[target], _calendars[index]);
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<CalendarService>()
+                .ReorderAsync(State.ActiveUserId, [.. _calendars.Select(c => c.Id)]);
+        }
+
+        await AfterChangeAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Silme
+    // ------------------------------------------------------------------
+
+    /// <summary>Silmeden önce kullanıcıya ne kaybedeceğini gösterir.</summary>
+    private async Task AskDelete(Calendar calendar)
+    {
+        _deleting = calendar;
+        _error = null;
+
+        await using var scope = Scopes.CreateAsyncScope();
+
+        _usage = await scope.ServiceProvider
+            .GetRequiredService<CalendarService>().GetUsageAsync(calendar.Id);
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_deleting is not { } target) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            _error = await scope.ServiceProvider
+                .GetRequiredService<CalendarService>().DeleteAsync(target.Id);
+        }
+
+        _deleting = null;
+        _usage = null;
+
+        if (_error is not null) return;
+
+        await AfterChangeAsync();
+    }
+
+    private async Task Restore(Guid calendarId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<CalendarService>().RestoreAsync(calendarId);
+        }
+
+        await AfterChangeAsync();
+    }
+
+    /// <summary>Takvim listesi ve ızgara birlikte tazelenir.</summary>
+    private async Task AfterChangeAsync()
+    {
+        await State.LoadUserContextAsync();
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    // ------------------------------------------------------------------
+
+    private static int? ParseMinutes(string value)
+        => int.TryParse(value, CultureInfo.InvariantCulture, out var minutes) ? minutes : null;
+
+    private static string KindLabel(CalendarKind kind) => kind switch
+    {
+        CalendarKind.Personal => "Kişisel",
+        CalendarKind.Team => "Ekip",
+        CalendarKind.Resource => "Kaynak",
+        CalendarKind.Subscribed => "Abone",
+        CalendarKind.Holiday => "Resmi tatiller",
+        _ => kind.ToString(),
+    };
+
+    /// <summary>Bu takvim başka bir bölümden mi yönetiliyor.</summary>
+    private static string? ManagedElsewhere(CalendarKind kind) => kind switch
+    {
+        CalendarKind.Resource => "Odalar ve ekipman bölümünden yönetilir",
+        CalendarKind.Subscribed => "Takvim abonelikleri bölümünden yönetilir",
+        CalendarKind.Holiday => "yerleşik",
+        _ => null,
+    };
+
+    private string RemainingLabel(Calendar calendar)
+    {
+        if (calendar.DeletedAt is not { } deletedAt) return string.Empty;
+
+        var elapsed = State.ToInstant(State.Now) - Instant.FromDateTimeOffset(deletedAt);
+        var remaining = (int)Math.Ceiling((CalendarService.TrashRetention - elapsed).TotalDays);
+
+        return remaining <= 0 ? "kalıcı silinmek üzere" : $"{remaining} gün sonra kalıcı silinecek";
+    }
+}

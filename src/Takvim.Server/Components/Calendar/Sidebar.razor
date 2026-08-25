@@ -14,7 +14,12 @@
                   OnSelect="OnDateSelected" />
 
     <section class="kenar__bolum">
-        <h2 class="kenar__baslik">Takvimlerim</h2>
+        <h2 class="kenar__baslik">
+            Takvimlerim
+            <button class="dugme dugme--sade" style="height:20px;font-size:11px;padding:0 6px"
+                    title="Takvim ekle veya düzenle" aria-label="Takvimleri yönet"
+                    @onclick="() => OnManageCalendars.InvokeAsync()">Yönet</button>
+        </h2>
 
         @foreach (var calendar in State.Calendars)
         {
@@ -139,6 +144,7 @@
     [Parameter] public EventCallback OnOpenAppointments { get; set; }
     [Parameter] public EventCallback OnOpenSubscriptions { get; set; }
     [Parameter] public EventCallback OnOpenMail { get; set; }
+    [Parameter] public EventCallback OnManageCalendars { get; set; }
 
     /// <summary>Bekleyen e-posta önerisi sayısı; sıfırsa rozet gösterilmez.</summary>
     [Parameter] public int ProposalCount { get; set; }
