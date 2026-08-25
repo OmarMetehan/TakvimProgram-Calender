@@ -20,6 +20,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+
+    <!-- Tepsi simgesi için: WPF'in kendi tepsi desteği yok, NotifyIcon
+         Windows Forms'ta. Pencereler yine WPF ile çizilir. -->
+    <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Takvim</AssemblyName>
     <RootNamespace>Takvim.Desktop</RootNamespace>
   </PropertyGroup>

@@ -7,6 +7,12 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Takvim.Data;
 using Takvim.Server;
+using Takvim.Server.State;
+
+// Windows Forms tepsi simgesi için açıldı ve iki çerçeve de "Application"
+// adını taşıyor. Kabuk WPF'tir; ad çakışması burada bir kez çözülür.
+using Application = System.Windows.Application;
+using MessageBox = System.Windows.MessageBox;
 
 namespace Takvim.Desktop;
 
@@ -20,9 +26,19 @@ namespace Takvim.Desktop;
 /// makinelerin bağlanmayı denemesini kolaylaştırır.
 /// </para>
 /// </summary>
-public partial class App : Application
+public partial class App : Application, IDisposable
 {
     private WebApplication? _server;
+    private TrayIcon? _tray;
+
+    /// <summary>
+    /// Kullanıcı gerçekten çıkmak istedi mi. Pencereyi kapatmak çıkmak değildir:
+    /// hatırlatıcıların gelmesi için uygulamanın açık kalması gerekir.
+    /// </summary>
+    private bool _exiting;
+
+    /// <summary>Tepsiye ilk inişte bir kez bilgi verilir; her seferinde değil.</summary>
+    private bool _hintShown;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -55,11 +71,77 @@ public partial class App : Application
                 ?? throw new InvalidOperationException("Sunucu adresi belirlenemedi.");
 
             await window.LoadAsync(address);
+
+            SetUpTray(window);
+            SubscribeToReminders(window);
         }
         catch (Exception ex)
         {
             ReportFatal(window, ex);
         }
+    }
+
+    /// <summary>
+    /// Tepsi simgesini kurar ve pencerenin kapanışını ona bağlar.
+    /// <para>
+    /// Pencereyi kapatmak uygulamadan çıkmaz. Çıksaydı hatırlatıcılar da
+    /// dururdu; oysa bir takvim uygulamasından beklenen tam tersidir. Çıkış
+    /// tepsi menüsünden açıkça yapılır.
+    /// </para>
+    /// </summary>
+    private void SetUpTray(MainWindow window)
+    {
+        _tray = new TrayIcon();
+
+        _tray.OpenRequested += () => Dispatcher.Invoke(() => ShowWindow(window));
+        _tray.ExitRequested += () => Dispatcher.Invoke(() =>
+        {
+            _exiting = true;
+            Shutdown();
+        });
+
+        window.Closing += (_, e) =>
+        {
+            if (_exiting) return;
+
+            e.Cancel = true;
+            window.Hide();
+
+            if (!_hintShown)
+            {
+                _hintShown = true;
+                _tray?.ShowHiddenHint();
+            }
+        };
+    }
+
+    private static void ShowWindow(MainWindow window)
+    {
+        window.Show();
+
+        // Simge durumundan geri getirilir; aksi hâlde görev çubuğunda kalır.
+        if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+
+        window.Activate();
+    }
+
+    /// <summary>
+    /// Hatırlatıcı yayınını dinler ve pencere görünmüyorken Windows bildirimi
+    /// gösterir. Pencere açıkken bildirim çıkmaz: arayüzdeki şerit zaten
+    /// görünür ve ikisi birden gereksiz gürültü olur.
+    /// </summary>
+    private void SubscribeToReminders(MainWindow window)
+    {
+        if (_server is null) return;
+
+        var broadcast = _server.Services.GetRequiredService<ReminderBroadcast>();
+
+        broadcast.Fired += reminders => Dispatcher.Invoke(() =>
+        {
+            if (window.IsVisible && window.WindowState != WindowState.Minimized) return;
+
+            _tray?.ShowReminders(reminders);
+        });
     }
 
     /// <summary>Kestrel'in gerçekten bağlandığı adresi okur; port 0 verildiği için önceden bilinmez.</summary>
@@ -95,8 +177,23 @@ public partial class App : Application
         Current.Shutdown(1);
     }
 
+    /// <summary>
+    /// Tepsi simgesini bırakır. WPF <see cref="Application"/> nesnesini kendisi
+    /// atmaz; bu yüzden çağrı <see cref="OnExit"/> içinden gelir.
+    /// </summary>
+    public void Dispose()
+    {
+        _tray?.Dispose();
+        _tray = null;
+
+        GC.SuppressFinalize(this);
+    }
+
     protected override async void OnExit(ExitEventArgs e)
     {
+        // Simge önce kaldırılır; sunucu kapanışını beklerse tepside asılı kalır.
+        Dispose();
+
         if (_server is not null)
         {
             // Bekleyen veritabanı yazmalarının tamamlanması için düzgün kapatılır.
