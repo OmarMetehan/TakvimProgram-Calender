@@ -1917,3 +1917,22 @@ kbd {
 }
 
 .izgara__kose-dilim { white-space: nowrap }
+
+/* Denetim günlüğü satırı */
+.denetim-satiri {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: var(--yuvarlak-s);
+    font-size: 13px;
+}
+
+.denetim-satiri:hover { background: var(--yuzey-2) }
+
+.denetim-satiri__saat {
+    flex: none;
+    width: 42px;
+    color: var(--metin-2);
+    font-variant-numeric: tabular-nums;
+}

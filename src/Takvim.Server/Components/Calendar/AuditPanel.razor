@@ -1,0 +1,248 @@
+@* Denetim günlüğü: kim, neyi, ne zaman değiştirdi. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel panel--genis" role="dialog" aria-modal="true" aria-label="Değişiklik geçmişi">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Değişiklik geçmişi</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        <p style="color:var(--metin-2);margin:0">
+            Her yazma işlemi kaydedilir; silinen bir şeyin izi de kalır.
+            Yalnızca erişebildiğiniz takvimlerin kayıtları görünür.
+        </p>
+
+        @* ---------- Süzgeçler ---------- *@
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+            <div>
+                <label class="etiket" for="dg-kisi">Kim</label>
+                <select id="dg-kisi" class="alan" @bind="_actorChoice" @bind:after="Reload">
+                    <option value="">Herkes</option>
+                    @foreach (var user in State.Users)
+                    {
+                        <option value="@user.Id">@user.DisplayName</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="etiket" for="dg-tur">Ne</label>
+                <select id="dg-tur" class="alan" @bind="_entityType" @bind:after="Reload">
+                    <option value="">Hepsi</option>
+                    @foreach (var type in _entityTypes)
+                    {
+                        <option value="@type">@AuditService.DescribeEntity(type)</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="etiket" for="dg-islem">Nasıl</label>
+                <select id="dg-islem" class="alan" @bind="_operationChoice" @bind:after="Reload">
+                    <option value="">Hepsi</option>
+                    <option value="@ChangeOperation.Create">Eklendi</option>
+                    <option value="@ChangeOperation.Update">Değiştirildi</option>
+                    <option value="@ChangeOperation.Delete">Silindi</option>
+                    <option value="@ChangeOperation.Restore">Geri alındı</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <div>
+                <label class="etiket" for="dg-takvim">Takvim</label>
+                <select id="dg-takvim" class="alan" @bind="_calendarChoice" @bind:after="Reload">
+                    <option value="">Hepsi</option>
+                    @foreach (var calendar in State.Calendars)
+                    {
+                        <option value="@calendar.Id">@calendar.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="etiket" for="dg-ara">Ara</label>
+                <input id="dg-ara" class="alan" placeholder="Özet metninde"
+                       @bind="_term" @bind:event="oninput" @onkeydown="OnSearchKey" />
+            </div>
+        </div>
+
+        @* ---------- Kayıtlar ---------- *@
+
+        @if (_rows.Count == 0)
+        {
+            <div class="bos-durum">
+                <div class="bos-durum__baslik">Kayıt yok</div>
+                <div>@(_filtered ? "Ölçütleri gevşetmeyi deneyin." : "Henüz bir değişiklik yapılmamış.")</div>
+            </div>
+        }
+        else
+        {
+            @foreach (var group in _rows.GroupBy(r => r.Entry.ChangedAt.LocalDateTime.Date))
+            {
+                <div class="arama-gun">
+                    @TurkishFormat.LongDateWithDay(LocalDate.FromDateTime(group.Key))
+                </div>
+
+                @foreach (var row in group)
+                {
+                    <div class="denetim-satiri">
+                        <span class="denetim-satiri__saat">
+                            @TurkishFormat.Time(LocalDateTime.FromDateTime(row.Entry.ChangedAt.LocalDateTime))
+                        </span>
+
+                        <span class="yanit @OperationClass(row.Entry.Operation)">
+                            @AuditService.DescribeOperation(row.Entry.Operation)
+                        </span>
+
+                        <span style="flex:1;min-width:0">
+                            <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                                  title="@row.Entry.Summary">
+                                @(row.Entry.Summary ?? AuditService.DescribeEntity(row.Entry.EntityType))
+                            </span>
+
+                            <span style="display:block;font-size:11px;color:var(--metin-3)">
+                                @AuditService.DescribeEntity(row.Entry.EntityType)
+                                @if (row.ActorName is { } actor)
+                                {
+                                    <span> · @actor</span>
+                                }
+                                @if (row.CalendarName is { } calendar)
+                                {
+                                    <span> · @calendar</span>
+                                }
+                            </span>
+                        </span>
+                    </div>
+                }
+            }
+
+            @if (_rows.Count >= AuditService.PageSize)
+            {
+                <button class="dugme dugme--sade" style="width:100%" disabled="@_loading"
+                        @onclick="LoadMore">
+                    @(_loading ? "Yükleniyor…" : "Daha eskisini göster")
+                </button>
+            }
+        }
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<AuditRow> _rows = [];
+    private List<string> _entityTypes = [];
+
+    private string _actorChoice = string.Empty;
+    private string _calendarChoice = string.Empty;
+    private string _entityType = string.Empty;
+    private string _operationChoice = string.Empty;
+    private string _term = string.Empty;
+
+    private bool _loading;
+
+    /// <summary>Bir süzgeç etkin mi; boş sonucun gerekçesini doğru yazmak için.</summary>
+    private bool _filtered;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        _entityTypes = await scope.ServiceProvider
+            .GetRequiredService<AuditService>().GetEntityTypesAsync();
+
+        await Reload();
+    }
+
+    private AuditFilter Current
+    {
+        get
+        {
+            var filter = new AuditFilter
+            {
+                ActorUserId = Guid.TryParse(_actorChoice, out var actor) ? actor : null,
+                CalendarId = Guid.TryParse(_calendarChoice, out var calendar) ? calendar : null,
+                EntityType = string.IsNullOrWhiteSpace(_entityType) ? null : _entityType,
+                Operation = Enum.TryParse<ChangeOperation>(_operationChoice, out var operation)
+                    ? operation : null,
+                Term = string.IsNullOrWhiteSpace(_term) ? null : _term.Trim(),
+            };
+
+            _filtered = filter.ActorUserId is not null
+                     || filter.CalendarId is not null
+                     || filter.EntityType is not null
+                     || filter.Operation is not null
+                     || filter.Term is not null;
+
+            return filter;
+        }
+    }
+
+    private async Task OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Reload();
+    }
+
+    private async Task Reload()
+    {
+        _loading = true;
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+
+            _rows = await scope.ServiceProvider
+                .GetRequiredService<AuditService>().GetAsync(State.ActiveUserId, Current);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>Sonraki sayfayı ekler; imleç son satırın belirtecidir.</summary>
+    private async Task LoadMore()
+    {
+        if (_rows.Count == 0) return;
+
+        _loading = true;
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+
+            var older = await scope.ServiceProvider
+                .GetRequiredService<AuditService>()
+                .GetAsync(State.ActiveUserId, Current, _rows[^1].Entry.SyncToken);
+
+            _rows.AddRange(older);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string OperationClass(ChangeOperation operation) => operation switch
+    {
+        ChangeOperation.Create => "yanit--kabul",
+        ChangeOperation.Delete => "yanit--ret",
+        ChangeOperation.Restore => "yanit--belirsiz",
+        _ => "yanit--bekliyor",
+    };
+}

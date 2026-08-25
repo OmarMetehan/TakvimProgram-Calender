@@ -115,6 +115,7 @@ public static class TakvimHost
         builder.Services.AddScoped<CalendarService>();
         builder.Services.AddScoped<CategoryService>();
         builder.Services.AddScoped<BackupService>();
+        builder.Services.AddScoped<AuditService>();
         builder.Services.AddScoped<LocationService>();
         builder.Services.AddScoped<TemplateService>();
         builder.Services.AddScoped<SearchService>();
