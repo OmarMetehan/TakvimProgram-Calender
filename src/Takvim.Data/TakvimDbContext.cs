@@ -30,6 +30,8 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<AppointmentSchedule> AppointmentSchedules => Set<AppointmentSchedule>();
     public DbSet<AppointmentWindow> AppointmentWindows => Set<AppointmentWindow>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<MailAccount> MailAccounts => Set<MailAccount>();
+    public DbSet<EventProposal> EventProposals => Set<EventProposal>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -154,6 +156,40 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<MailAccount>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.EmailAddress).HasMaxLength(320);
+            e.Property(x => x.LastError).HasMaxLength(500);
+
+            e.HasOne(x => x.User).WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+            // Aynı kutu bir kullanıcıda iki kez bağlanamaz.
+            e.HasIndex(x => new { x.UserId, x.Provider, x.EmailAddress }).IsUnique();
+        });
+
+        modelBuilder.Entity<EventProposal>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.MessageId).HasMaxLength(255);
+            e.Property(x => x.Subject).HasMaxLength(500);
+            e.Property(x => x.From).HasMaxLength(320);
+            e.Property(x => x.Snippet).HasMaxLength(1000);
+            e.Property(x => x.Title).HasMaxLength(500);
+            e.Property(x => x.LocationText).HasMaxLength(1000);
+            e.Property(x => x.OnlineMeetingUrl).HasMaxLength(2000);
+
+            e.HasOne(x => x.Account).WithMany()
+                .HasForeignKey(x => x.MailAccountId).OnDelete(DeleteBehavior.Cascade);
+
+            // Aynı ileti ikinci kez önerilmez — reddedilmiş olsa bile.
+            e.HasIndex(x => new { x.MailAccountId, x.MessageId }).IsUnique();
+            e.HasIndex(x => x.Status);
         });
 
         modelBuilder.Entity<AppointmentSchedule>(e =>

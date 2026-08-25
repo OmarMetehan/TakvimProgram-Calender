@@ -179,11 +179,15 @@ public static partial class TurkishEventParser
             text = text.Remove(relative.Index, relative.Length).Insert(relative.Index, " ");
             recognized = true;
 
-            return relative.Groups["gun"].Value switch
+            // Kalıp büyük/küçük harf ayırmadan eşleşir, bu yüzden karşılaştırmadan
+            // önce küçültülür: cümle başındaki "Yarın" da yarın demektir.
+            // "öbür gün" ve "ertesi gün" grubun dışında kaldığı için boş düşer
+            // ve varsayılan dala gider.
+            return relative.Groups["gun"].Value.ToLower(TurkishFormat.Culture) switch
             {
-                "bugün" => now.Date,
-                "yarın" => now.Date.PlusDays(1),
-                "dün" => now.Date.PlusDays(-1),
+                "bugün" or "bugun" => now.Date,
+                "yarın" or "yarin" => now.Date.PlusDays(1),
+                "dün" or "dun" => now.Date.PlusDays(-1),
                 _ => now.Date.PlusDays(2),   // öbür gün / ertesi gün
             };
         }
@@ -420,7 +424,11 @@ public static partial class TurkishEventParser
     [GeneratedRegex(@"\bher\s+(?<birim>gün|hafta|ay|yıl)\w*\b", Options)]
     private static partial Regex SimpleEveryPattern();
 
-    [GeneratedRegex(@"\b(?<gun>bugün|yarın|dün)\w*\b|\b(?:öbür|ertesi)\s+gün\w*\b", Options)]
+    // Aksansız yazımlar da kabul edilir: kullanıcı "yarin" yazabilir, ayrıca
+    // kalıplar CultureInvariant olduğu için büyük harfli "YARIN"ın küçüğü
+    // noktasız "yarin"dir ve dotlu "yarın" ile eşleşmez.
+    [GeneratedRegex(
+        @"\b(?<gun>bugün|bugun|yarın|yarin|dün|dun)\w*\b|\b(?:öbür|obur|ertesi)\s+gün\w*\b", Options)]
     private static partial Regex RelativeDayPattern();
 
     [GeneratedRegex(@"\b(?<gun>\d{1,2})\s+(?<ay>ocak|şubat|mart|nisan|mayıs|haziran|temmuz|ağustos|eylül|ekim|kasım|aralık)\w*(?:\s+(?<yil>\d{4}))?", Options)]
