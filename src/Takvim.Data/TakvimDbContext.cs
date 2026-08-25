@@ -27,6 +27,9 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<Resource> Resources => Set<Resource>();
     public DbSet<ResourceBooking> ResourceBookings => Set<ResourceBooking>();
+    public DbSet<AppointmentSchedule> AppointmentSchedules => Set<AppointmentSchedule>();
+    public DbSet<AppointmentWindow> AppointmentWindows => Set<AppointmentWindow>();
+    public DbSet<Appointment> Appointments => Set<Appointment>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -150,6 +153,62 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<AppointmentSchedule>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Slug).HasMaxLength(60);
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.Property(x => x.LocationText).HasMaxLength(1000);
+            e.Property(x => x.OnlineMeetingProvider).HasMaxLength(32);
+
+            e.Ignore(x => x.BlockLength);
+            e.Ignore(x => x.Length);
+
+            e.HasOne(x => x.Owner).WithMany()
+                .HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Calendar).WithMany()
+                .HasForeignKey(x => x.CalendarId).OnDelete(DeleteBehavior.Cascade);
+
+            // Adres satırındaki kısa ad benzersizdir; yerel ağa açılan sayfa
+            // sayfayı bununla bulur.
+            e.HasIndex(x => x.Slug).IsUnique();
+        });
+
+        modelBuilder.Entity<AppointmentWindow>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.HasOne(x => x.Schedule).WithMany(s => s.Windows)
+                .HasForeignKey(x => x.ScheduleId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.ScheduleId);
+        });
+
+        modelBuilder.Entity<Appointment>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.GuestName).HasMaxLength(200);
+            e.Property(x => x.GuestEmail).HasMaxLength(320);
+            e.Property(x => x.Note).HasMaxLength(2000);
+            e.Property(x => x.CancellationReason).HasMaxLength(500);
+
+            e.Ignore(x => x.IsCancelled);
+
+            e.HasOne(x => x.Schedule).WithMany()
+                .HasForeignKey(x => x.ScheduleId).OnDelete(DeleteBehavior.Cascade);
+
+            // Etkinlik kalıcı silinirse randevu kaydı da gider.
+            e.HasOne(x => x.Event).WithMany()
+                .HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
+
+            // Dilim sorgusunun ve günlük sınırın dayandığı indeks.
+            e.HasIndex(x => new { x.ScheduleId, x.StartUtc });
         });
 
         modelBuilder.Entity<Resource>(e =>

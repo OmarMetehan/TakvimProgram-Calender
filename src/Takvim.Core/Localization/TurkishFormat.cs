@@ -49,6 +49,9 @@ public static class TurkishFormat
 
     public static string DayName(LocalDate date) => DayNames[DayIndex(date)];
 
+    /// <summary>Haftanın gününün adı; tarih olmadan, ör. haftalık pencerelerde.</summary>
+    public static string DayName(IsoDayOfWeek day) => DayNames[(int)day - 1];
+
     public static string DayAbbreviation(LocalDate date) => DayAbbreviations[DayIndex(date)];
 
     /// <summary>Mart 2026</summary>

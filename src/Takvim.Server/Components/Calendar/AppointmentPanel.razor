@@ -1,0 +1,425 @@
+@* Randevu sayfaları: tanımlama, gelen randevular ve paylaşılabilir adres. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel panel--genis" role="dialog" aria-modal="true" aria-label="Randevu sayfaları">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Randevu sayfaları</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        <p style="color:var(--metin-2);margin:0">
+            Randevu sayfası, "şu saatlerde bana randevu alabilirsiniz" demenin yoludur.
+            Takviminizdeki boş saatler kendiliğinden açılmaz: aşağıda tanımladığınız
+            pencerelerden, o sırada meşgul olduğunuz saatler düşülerek üretilir.
+        </p>
+
+        @* ---------- Gelen randevular ---------- *@
+
+        @if (_upcoming.Count > 0)
+        {
+            <section>
+                <h3 style="font-size:14px;margin:0 0 6px">Yaklaşan randevular (@_upcoming.Count)</h3>
+
+                @foreach (var appointment in _upcoming)
+                {
+                    <div class="kaynak-satiri">
+                        <span aria-hidden="true">📅</span>
+
+                        <span style="flex:1;min-width:0">
+                            <span style="display:block;font-weight:500">@appointment.GuestName</span>
+                            <span style="display:block;font-size:12px;color:var(--metin-2)">
+                                @TurkishFormat.DateTime(State.ToLocal(appointment.StartUtc)) ·
+                                @(appointment.Schedule?.Name ?? "")
+                            </span>
+                            @if (!string.IsNullOrWhiteSpace(appointment.Note))
+                            {
+                                <span style="display:block;font-size:11px;color:var(--metin-3)">
+                                    "@appointment.Note"
+                                </span>
+                            }
+                        </span>
+
+                        <button class="dugme dugme--tehlike"
+                                @onclick="() => Cancel(appointment.Id)">İptal</button>
+                    </div>
+                }
+            </section>
+        }
+
+        @* ---------- Sayfalar ---------- *@
+
+        <section>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <h3 style="font-size:14px;margin:0">Sayfalarım</h3>
+                <span class="panel__bosluk"></span>
+                <button class="dugme dugme--birincil" @onclick="BeginCreate">+ Yeni sayfa</button>
+            </div>
+
+            @if (_editing is not null)
+            {
+                <div class="kaynak-arama" style="margin-bottom:10px">
+                    <div>
+                        <label class="etiket" for="rs-ad">Sayfanın adı</label>
+                        <input id="rs-ad" class="alan" placeholder="30 dakikalık görüşme"
+                               @bind="_name" @bind:event="oninput" />
+                    </div>
+
+                    <div style="margin-top:6px">
+                        <label class="etiket" for="rs-aciklama">Açıklama</label>
+                        <textarea id="rs-aciklama" class="alan" rows="2"
+                                  placeholder="Randevu alan kişinin göreceği metin"
+                                  @bind="_description" @bind:event="oninput"></textarea>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px">
+                        <div>
+                            <label class="etiket" for="rs-sure">Süre (dk)</label>
+                            <input id="rs-sure" class="alan" type="number" min="5" max="480" @bind="_duration" />
+                        </div>
+                        <div>
+                            <label class="etiket" for="rs-tampon">Tampon (dk)</label>
+                            <input id="rs-tampon" class="alan" type="number" min="0" max="120" @bind="_buffer" />
+                        </div>
+                        <div>
+                            <label class="etiket" for="rs-onbildirim">En erken (saat)</label>
+                            <input id="rs-onbildirim" class="alan" type="number" min="0" max="720" @bind="_notice" />
+                        </div>
+                        <div>
+                            <label class="etiket" for="rs-ufuk">En geç (gün)</label>
+                            <input id="rs-ufuk" class="alan" type="number" min="1" max="365" @bind="_advance" />
+                        </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px">
+                        <div>
+                            <label class="etiket" for="rs-takvim">Takvim</label>
+                            <select id="rs-takvim" class="alan" @bind="_calendarId">
+                                @foreach (var calendar in State.WritableCalendars)
+                                {
+                                    <option value="@calendar.Id">@calendar.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="etiket" for="rs-gunluk">Günde en fazla</label>
+                            <input id="rs-gunluk" class="alan" type="number" min="0" max="50"
+                                   placeholder="sınırsız" @bind="_perDay" />
+                        </div>
+
+                        <div>
+                            <label class="etiket" for="rs-saglayici">Buluşma</label>
+                            <select id="rs-saglayici" class="alan" @bind="_provider">
+                                <option value="">Yüz yüze</option>
+                                <option value="jitsi">Her randevuya Jitsi odası</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:6px">
+                        <label class="etiket" for="rs-konum">Konum</label>
+                        <input id="rs-konum" class="alan" placeholder="Ofis, oda numarası…"
+                               @bind="_location" @bind:event="oninput" />
+                    </div>
+
+                    <div style="margin-top:10px">
+                        <span class="etiket">Randevuya açık saatler</span>
+
+                        @foreach (var day in Days)
+                        {
+                            var window = _windows.FirstOrDefault(w => w.Day == day);
+
+                            <div class="randevu-gun">
+                                <label class="liste-ogesi" style="padding-left:0;width:130px">
+                                    <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                                           checked="@(window is not null)"
+                                           @onchange="e => ToggleDay(day, (bool)(e.Value ?? false))" />
+                                    <span class="liste-ogesi__ad">@TurkishFormat.DayName(day)</span>
+                                </label>
+
+                                @if (window is not null)
+                                {
+                                    <input class="alan" type="time" style="width:110px"
+                                           aria-label="@($"{TurkishFormat.DayName(day)} başlangıç")"
+                                           value="@window.Start" @onchange="e => SetStart(day, e)" />
+
+                                    <span style="color:var(--metin-3)">–</span>
+
+                                    <input class="alan" type="time" style="width:110px"
+                                           aria-label="@($"{TurkishFormat.DayName(day)} bitiş")"
+                                           value="@window.End" @onchange="e => SetEnd(day, e)" />
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div style="display:flex;gap:6px;margin-top:10px">
+                        @if (_editing != Guid.Empty)
+                        {
+                            <button class="dugme dugme--tehlike" @onclick="Delete">Sayfayı sil</button>
+                        }
+
+                        <span class="panel__bosluk"></span>
+                        <button class="dugme" @onclick="() => _editing = null">Vazgeç</button>
+                        <button class="dugme dugme--birincil"
+                                disabled="@string.IsNullOrWhiteSpace(_name)"
+                                @onclick="Save">Kaydet</button>
+                    </div>
+                </div>
+            }
+
+            @if (_schedules.Count == 0)
+            {
+                <div class="bos-durum">
+                    <div class="bos-durum__baslik">Randevu sayfanız yok</div>
+                    <div>Bir sayfa açın; adresini paylaştığınız kişiler uygun saatlerinizi görür.</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var schedule in _schedules)
+                {
+                    <div class="kaynak-satiri @(schedule.IsActive ? "" : "kaynak-satiri--kapali")">
+                        <span aria-hidden="true">🗓</span>
+
+                        <button type="button" class="gorev__baslik" @onclick="() => BeginEdit(schedule)">
+                            <span style="display:block">@schedule.Name</span>
+                            <span style="display:block;font-size:11px;color:var(--metin-3)">
+                                @schedule.DurationMinutes dk ·
+                                @(schedule.Windows.Count) gün ·
+                                /randevu/@schedule.Slug
+                            </span>
+                        </button>
+
+                        <button class="dugme dugme--sade" title="Adresi panoya kopyala"
+                                @onclick="() => CopyLink(schedule.Slug)">🔗</button>
+
+                        <button class="dugme dugme--sade"
+                                @onclick="() => SetActive(schedule.Id, !schedule.IsActive)">
+                            @(schedule.IsActive ? "Kapat" : "Aç")
+                        </button>
+                    </div>
+                }
+
+                <div style="font-size:11px;color:var(--metin-3);margin-top:6px">
+                    Adresler yalnızca bu bilgisayardan ve —
+                    <strong>Cihaz senkronizasyonu</strong> ayarında yerel ağa izin verilmişse —
+                    aynı ağdaki cihazlardan açılır. İnternete açılmaz.
+                </div>
+            }
+        </section>
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+    [Inject] public required IJSRuntime Js { get; set; }
+    [Inject] public required NavigationManager Navigation { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private static readonly IsoDayOfWeek[] Days =
+    [
+        IsoDayOfWeek.Monday, IsoDayOfWeek.Tuesday, IsoDayOfWeek.Wednesday,
+        IsoDayOfWeek.Thursday, IsoDayOfWeek.Friday, IsoDayOfWeek.Saturday, IsoDayOfWeek.Sunday,
+    ];
+
+    /// <summary>Formdaki bir günün saat aralığı; saatler metin olarak tutulur.</summary>
+    private sealed class WindowRow
+    {
+        public IsoDayOfWeek Day { get; init; }
+        public string Start { get; set; } = "09:00";
+        public string End { get; set; } = "17:00";
+    }
+
+    private List<AppointmentSchedule> _schedules = [];
+    private List<Appointment> _upcoming = [];
+    private readonly List<WindowRow> _windows = [];
+
+    private Guid? _editing;
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private string _location = string.Empty;
+    private string _provider = string.Empty;
+    private Guid _calendarId;
+    private int _duration = 30;
+    private int _buffer = 5;
+    private int _notice = 4;
+    private int _advance = 30;
+    private int? _perDay;
+
+    // ------------------------------------------------------------------
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var appointments = scope.ServiceProvider.GetRequiredService<AppointmentService>();
+
+        _schedules = await appointments.GetSchedulesAsync(State.ActiveUserId);
+        _upcoming = await appointments.GetUpcomingAsync(State.ActiveUserId);
+    }
+
+    private void BeginCreate()
+    {
+        _editing = Guid.Empty;
+        _name = string.Empty;
+        _description = string.Empty;
+        _location = string.Empty;
+        _provider = string.Empty;
+        _calendarId = State.DefaultCalendar?.Id ?? Guid.Empty;
+        _duration = 30;
+        _buffer = 5;
+        _notice = 4;
+        _advance = 30;
+        _perDay = null;
+
+        _windows.Clear();
+
+        // Hafta içi 09:00-17:00 makul bir başlangıçtır; kullanıcı daraltır.
+        foreach (var day in Days.Take(5)) _windows.Add(new WindowRow { Day = day });
+    }
+
+    private void BeginEdit(AppointmentSchedule schedule)
+    {
+        if (_editing == schedule.Id) { _editing = null; return; }
+
+        _editing = schedule.Id;
+        _name = schedule.Name;
+        _description = schedule.Description ?? string.Empty;
+        _location = schedule.LocationText ?? string.Empty;
+        _provider = schedule.OnlineMeetingProvider ?? string.Empty;
+        _calendarId = schedule.CalendarId;
+        _duration = schedule.DurationMinutes;
+        _buffer = schedule.BufferMinutes;
+        _notice = schedule.MinimumNoticeHours;
+        _advance = schedule.MaximumAdvanceDays;
+        _perDay = schedule.MaximumPerDay;
+
+        _windows.Clear();
+
+        foreach (var window in schedule.Windows.OrderBy(w => w.DayOfWeek))
+        {
+            _windows.Add(new WindowRow
+            {
+                Day = window.DayOfWeek,
+                Start = window.Start.ToString("HH:mm", CultureInfo.InvariantCulture),
+                End = window.End.ToString("HH:mm", CultureInfo.InvariantCulture),
+            });
+        }
+    }
+
+    private void ToggleDay(IsoDayOfWeek day, bool enabled)
+    {
+        _windows.RemoveAll(w => w.Day == day);
+
+        if (enabled) _windows.Add(new WindowRow { Day = day });
+    }
+
+    private void SetStart(IsoDayOfWeek day, ChangeEventArgs e)
+    {
+        if (_windows.FirstOrDefault(w => w.Day == day) is { } row)
+            row.Start = e.Value?.ToString() ?? row.Start;
+    }
+
+    private void SetEnd(IsoDayOfWeek day, ChangeEventArgs e)
+    {
+        if (_windows.FirstOrDefault(w => w.Day == day) is { } row)
+            row.End = e.Value?.ToString() ?? row.End;
+    }
+
+    private async Task Save()
+    {
+        if (_editing is not { } editing || string.IsNullOrWhiteSpace(_name)) return;
+
+        var input = new AppointmentScheduleInput
+        {
+            Name = _name,
+            Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(),
+            CalendarId = _calendarId,
+            DurationMinutes = _duration,
+            BufferMinutes = _buffer,
+            MinimumNoticeHours = _notice,
+            MaximumAdvanceDays = _advance,
+            MaximumPerDay = _perDay,
+            LocationText = string.IsNullOrWhiteSpace(_location) ? null : _location.Trim(),
+            OnlineMeetingProvider = string.IsNullOrWhiteSpace(_provider) ? null : _provider,
+            Windows = [.. _windows
+                .Select(w => (w.Day, ParseTime(w.Start), ParseTime(w.End)))],
+        };
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var appointments = scope.ServiceProvider.GetRequiredService<AppointmentService>();
+
+            if (editing == Guid.Empty) await appointments.CreateAsync(input, State.ActiveUserId);
+            else await appointments.UpdateAsync(editing, input);
+        }
+
+        _editing = null;
+        await LoadAsync();
+    }
+
+    private async Task SetActive(Guid scheduleId, bool isActive)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<AppointmentService>()
+                .SetActiveAsync(scheduleId, isActive);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task Delete()
+    {
+        if (_editing is not { } editing || editing == Guid.Empty) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<AppointmentService>().DeleteAsync(editing);
+        }
+
+        _editing = null;
+        await LoadAsync();
+    }
+
+    private async Task Cancel(Guid appointmentId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<AppointmentService>()
+                .CancelAsync(appointmentId, "Sayfa sahibi iptal etti", State.ActiveUserId);
+        }
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task CopyLink(string slug)
+    {
+        var url = Navigation.BaseUri.TrimEnd('/') + "/randevu/" + slug;
+
+        await Js.InvokeVoidAsync("takvim.copyText", url);
+        State.ShowStatus("Adres panoya kopyalandı.");
+    }
+
+    private static LocalTime ParseTime(string value)
+        => TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var parsed)
+            ? LocalTime.FromTicksSinceMidnight(parsed.Ticks)
+            : new LocalTime(9, 0);
+}

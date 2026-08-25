@@ -1,0 +1,273 @@
+@page "/randevu/{Slug}"
+@rendermode InteractiveServer
+
+@* Randevu alma sayfası. Uygulamanın kendi arayüzünden bağımsızdır: bu sayfayı
+   açan kişi takvimi görmez, yalnızca açık dilimleri görür. *@
+
+<PageTitle>@(_schedule?.Name ?? "Randevu")</PageTitle>
+
+<div class="randevu-sayfa">
+
+    @if (_schedule is null)
+    {
+        <div class="bos-durum">
+            <div class="bos-durum__baslik">Sayfa bulunamadı</div>
+            <div>Adres yanlış olabilir ya da sayfa kapatılmış olabilir.</div>
+        </div>
+    }
+    else if (_booked is { } booked)
+    {
+        <div class="randevu-onay">
+            <div style="font-size:32px" aria-hidden="true">✓</div>
+            <h1 style="font-size:20px;margin:8px 0">Randevunuz alındı</h1>
+
+            <p style="margin:0;color:var(--metin-2)">
+                @TurkishFormat.LongDateWithDay(LocalOf(booked.StartUtc).Date),
+                @TurkishFormat.Time(LocalOf(booked.StartUtc)) –
+                @TurkishFormat.Time(LocalOf(booked.EndUtc))
+            </p>
+
+            <p style="margin:6px 0 0;color:var(--metin-2)">
+                @_schedule.Name · @(_schedule.Owner?.DisplayName ?? "")
+            </p>
+
+            @if (!string.IsNullOrWhiteSpace(_schedule.LocationText))
+            {
+                <p style="margin:6px 0 0;color:var(--metin-2)">📍 @_schedule.LocationText</p>
+            }
+
+            <p style="margin:14px 0 0;font-size:12px;color:var(--metin-3)">
+                Saatler @ZoneLabel dilimine göredir.
+            </p>
+        </div>
+    }
+    else
+    {
+        <header class="randevu-baslik">
+            <h1 style="font-size:22px;margin:0">@_schedule.Name</h1>
+            <p style="margin:4px 0 0;color:var(--metin-2)">
+                @(_schedule.Owner?.DisplayName ?? "") · @_schedule.DurationMinutes dakika
+            </p>
+
+            @if (!string.IsNullOrWhiteSpace(_schedule.Description))
+            {
+                <div class="zengin-metin" style="margin-top:8px">
+                    @((MarkupString)RichText.ToHtml(_schedule.Description))
+                </div>
+            }
+        </header>
+
+        <div class="randevu-govde">
+
+            @* ---------- Dilimler ---------- *@
+
+            <section>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                    <button class="dugme" @onclick="() => ShiftWeek(-1)"
+                            disabled="@(_weekStart <= _today)">‹ Önceki</button>
+
+                    <strong style="flex:1;text-align:center">
+                        @TurkishFormat.DayAndMonth(_weekStart) – @TurkishFormat.DayAndMonth(_weekStart.PlusDays(6))
+                    </strong>
+
+                    <button class="dugme" @onclick="() => ShiftWeek(1)">Sonraki ›</button>
+                </div>
+
+                @if (_loading)
+                {
+                    <div class="bos-durum"><span>Uygun saatler aranıyor…</span></div>
+                }
+                else if (_slots.Count == 0)
+                {
+                    <div class="bos-durum">
+                        <div class="bos-durum__baslik">Bu hafta uygun saat yok</div>
+                        <div>Sonraki haftaya bakabilirsiniz.</div>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var group in _slots.GroupBy(s => s.StartLocal.Date))
+                    {
+                        <div class="randevu-gun-basligi">@TurkishFormat.LongDateWithDay(group.Key)</div>
+
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+                            @foreach (var slot in group)
+                            {
+                                <button type="button"
+                                        class="randevu-dilim @(_selected?.StartUtc == slot.StartUtc ? "randevu-dilim--secili" : "")"
+                                        @onclick="() => _selected = slot">
+                                    @TurkishFormat.Time(slot.StartLocal)
+                                </button>
+                            }
+                        </div>
+                    }
+                }
+
+                <div style="font-size:12px;color:var(--metin-3)">
+                    Saatler @ZoneLabel dilimine göredir.
+                </div>
+            </section>
+
+            @* ---------- Form ---------- *@
+
+            @if (_selected is { } selected)
+            {
+                <section class="randevu-form">
+                    <h2 style="font-size:15px;margin:0 0 8px">
+                        @TurkishFormat.LongDateWithDay(selected.StartLocal.Date),
+                        @TurkishFormat.Time(selected.StartLocal)
+                    </h2>
+
+                    @if (_error is { } error)
+                    {
+                        <div role="alert" style="color:var(--tehlike);font-size:13px;margin-bottom:8px">
+                            @error
+                        </div>
+                    }
+
+                    <div>
+                        <label class="etiket" for="rv-ad">Adınız</label>
+                        <input id="rv-ad" class="alan" @bind="_guestName" @bind:event="oninput" />
+                    </div>
+
+                    <div style="margin-top:6px">
+                        <label class="etiket" for="rv-eposta">E-posta (isteğe bağlı)</label>
+                        <input id="rv-eposta" class="alan" type="email"
+                               @bind="_guestEmail" @bind:event="oninput" />
+                    </div>
+
+                    <div style="margin-top:6px">
+                        <label class="etiket" for="rv-not">Konu (isteğe bağlı)</label>
+                        <textarea id="rv-not" class="alan" rows="3"
+                                  placeholder="Ne görüşmek istiyorsunuz?"
+                                  @bind="_note" @bind:event="oninput"></textarea>
+                    </div>
+
+                    <div style="display:flex;gap:6px;margin-top:10px">
+                        <span class="panel__bosluk"></span>
+                        <button class="dugme" @onclick="() => _selected = null">Vazgeç</button>
+                        <button class="dugme dugme--birincil"
+                                disabled="@(_saving || string.IsNullOrWhiteSpace(_guestName))"
+                                @onclick="Book">
+                            @(_saving ? "Alınıyor…" : "Randevuyu al")
+                        </button>
+                    </div>
+                </section>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+    [Inject] public required TimeZoneService Zones { get; set; }
+    [Inject] public required IClock Clock { get; set; }
+
+    [Parameter] public string Slug { get; set; } = string.Empty;
+
+    private AppointmentSchedule? _schedule;
+    private List<AppointmentSlot> _slots = [];
+    private AppointmentSlot? _selected;
+    private Appointment? _booked;
+
+    private LocalDate _today;
+    private LocalDate _weekStart;
+
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+
+    private string _guestName = string.Empty;
+    private string _guestEmail = string.Empty;
+    private string _note = string.Empty;
+
+    /// <summary>Sayfanın sahibinin zaman dilimi; saatler onun duvar saatidir.</summary>
+    private string ZoneId => _schedule?.Owner?.TimeZoneId ?? TimeZoneService.DefaultZoneId;
+
+    private string ZoneLabel => ZoneId.Replace('_', ' ');
+
+    private LocalDateTime LocalOf(Instant instant) => Zones.ToLocal(instant, ZoneId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var appointments = scope.ServiceProvider.GetRequiredService<AppointmentService>();
+
+        _schedule = await appointments.FindBySlugAsync(Slug);
+
+        if (_schedule is null)
+        {
+            _loading = false;
+            return;
+        }
+
+        _today = Zones.ToLocal(Clock.GetCurrentInstant(), ZoneId).Date;
+        _weekStart = _today;
+
+        await LoadSlotsAsync();
+    }
+
+    private async Task LoadSlotsAsync()
+    {
+        if (_schedule is null) return;
+
+        _loading = true;
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+
+            _slots = await scope.ServiceProvider.GetRequiredService<AppointmentService>()
+                .GetSlotsAsync(_schedule.Id, _weekStart, _weekStart.PlusDays(7));
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ShiftWeek(int weeks)
+    {
+        var next = _weekStart.PlusDays(7 * weeks);
+
+        // Geçmişe gidilmez; bugünden öncesinde dilim zaten olmaz.
+        _weekStart = next < _today ? _today : next;
+        _selected = null;
+
+        await LoadSlotsAsync();
+    }
+
+    private async Task Book()
+    {
+        if (_schedule is null || _selected is not { } slot) return;
+        if (string.IsNullOrWhiteSpace(_guestName)) return;
+
+        _saving = true;
+        _error = null;
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+
+            var result = await scope.ServiceProvider.GetRequiredService<AppointmentService>()
+                .BookAsync(_schedule.Id, slot.StartUtc, _guestName, _guestEmail, _note);
+
+            if (result.Error is { } error)
+            {
+                _error = error;
+
+                // Dilim kapılmış olabilir; liste tazelenir ki kullanıcı
+                // gerçekten açık olanları görsün.
+                _selected = null;
+                await LoadSlotsAsync();
+                return;
+            }
+
+            _booked = result.Appointment;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

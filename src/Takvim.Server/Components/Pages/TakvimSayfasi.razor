@@ -25,7 +25,8 @@
                  OnOpenWorkSchedule="() => OpenWorkSchedule(State.Today)"
                  OnOpenCalDav="() => _panel = Panel.CalDav"
                  OnOpenTasks="() => _panel = Panel.Tasks"
-                 OnOpenResources="() => _panel = Panel.Resources" />
+                 OnOpenResources="() => _panel = Panel.Resources"
+                 OnOpenAppointments="() => _panel = Panel.Appointments" />
 
         <main class="icerik">
             @if (State.IsLoading)
@@ -89,6 +90,11 @@
                      OnAcceptProposal="AcceptProposal"
                      OnResetResponses="ResetResponses"
                      OnCancel="CloseAll" />
+    }
+
+    @if (_panel == Panel.Appointments)
+    {
+        <AppointmentPanel OnClose="CloseAll" OnChanged="() => State.ReloadAsync()" />
     }
 
     @if (_panel == Panel.Resources)
@@ -186,7 +192,7 @@
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
     [Inject] public required IJSRuntime Js { get; set; }
 
-    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search, Tasks, Resources }
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search, Tasks, Resources, Appointments }
 
     private Panel _panel = Panel.None;
 

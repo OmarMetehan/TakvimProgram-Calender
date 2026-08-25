@@ -127,6 +127,30 @@ window.takvim = (function () {
             setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
         },
 
+        /**
+         * Metni panoya kopyalar. Pano izni verilmemişse gizli bir alan
+         * üzerinden eski yönteme düşer; gömülü pencerede izin istemi çıkmaz.
+         */
+        copyText: async function (text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (e) {
+                const field = document.createElement('textarea');
+                field.value = text;
+                field.style.position = 'fixed';
+                field.style.opacity = '0';
+                document.body.appendChild(field);
+                field.select();
+
+                let copied = false;
+                try { copied = document.execCommand('copy'); } catch (e2) { copied = false; }
+
+                document.body.removeChild(field);
+                return copied;
+            }
+        },
+
         /** Seçilen dosyanın metnini okur; ICS içe aktarma bunu kullanır. */
         readFileText: async function (inputElement) {
             if (!inputElement || !inputElement.files || inputElement.files.length === 0) return null;

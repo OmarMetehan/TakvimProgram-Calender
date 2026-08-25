@@ -1820,3 +1820,66 @@ kbd {
 .kaynak-aday--dolu { opacity: .55; cursor: not-allowed }
 
 .kaynak-satiri--kapali { opacity: .55 }
+
+/* Randevu sayfaları */
+.randevu-gun {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.randevu-sayfa {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+}
+
+.randevu-baslik {
+    border-bottom: 1px solid var(--cizgi);
+    padding-bottom: 14px;
+    margin-bottom: 16px;
+}
+
+.randevu-govde {
+    display: grid;
+    gap: 18px;
+}
+
+.randevu-gun-basligi {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--metin-2);
+    margin: 10px 0 5px;
+}
+
+.randevu-dilim {
+    padding: 7px 14px;
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak-s);
+    background: var(--zemin);
+    color: var(--metin);
+    font: inherit;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+}
+
+.randevu-dilim:hover { border-color: var(--birincil) }
+
+.randevu-dilim--secili {
+    background: var(--birincil);
+    border-color: var(--birincil);
+    color: #fff;
+}
+
+.randevu-form {
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak);
+    padding: 14px;
+}
+
+.randevu-onay {
+    text-align: center;
+    padding: 48px 16px;
+}

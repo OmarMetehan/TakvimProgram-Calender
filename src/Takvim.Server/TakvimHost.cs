@@ -94,6 +94,7 @@ public static class TakvimHost
         builder.Services.AddScoped<SearchService>();
         builder.Services.AddScoped<TaskService>();
         builder.Services.AddScoped<ResourceService>();
+        builder.Services.AddScoped<AppointmentService>();
         builder.Services.AddScoped<CalendarBootstrapper>();
 
         // Hatırlatıcı zamanlayıcısı uygulama ömrü boyunca tek örnektir; sonucu

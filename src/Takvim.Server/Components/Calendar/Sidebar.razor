@@ -76,6 +76,11 @@
             <span class="liste-ogesi__ad">İçe / dışa aktar</span>
         </button>
 
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenAppointments.InvokeAsync()">
+            <span aria-hidden="true">🗓</span>
+            <span class="liste-ogesi__ad">Randevu sayfaları</span>
+        </button>
+
         <button type="button" class="liste-ogesi" @onclick="() => OnOpenResources.InvokeAsync()">
             <span aria-hidden="true">🚪</span>
             <span class="liste-ogesi__ad">Odalar ve ekipman</span>
@@ -117,6 +122,7 @@
     [Parameter] public EventCallback OnOpenCalDav { get; set; }
     [Parameter] public EventCallback OnOpenTasks { get; set; }
     [Parameter] public EventCallback OnOpenResources { get; set; }
+    [Parameter] public EventCallback OnOpenAppointments { get; set; }
 
     private Task OnDateSelected(LocalDate date)
     {
