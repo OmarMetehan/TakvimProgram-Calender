@@ -174,6 +174,19 @@ public static class TakvimHost
     }
 
     /// <summary>
+    /// Stil ve betik adreslerine eklenen sürüm damgası.
+    /// <para>
+    /// Masaüstü kabuğunda varlık adresleri parmak izsiz kalıyor: bildirim
+    /// yalnızca web projesinin kendi çıktısında bulunabiliyor. Parmak izi
+    /// olmayınca gömülü tarayıcı eski bir cevabı süresiz saklayabiliyor —
+    /// nitekim bir kez boş bir yanıtı saklayıp uygulamayı biçimsiz açtı.
+    /// Modül kimliği her derlemede değiştiği için damga olarak yeterli.
+    /// </para>
+    /// </summary>
+    public static string AssetVersion { get; } =
+        typeof(TakvimHost).Assembly.ManifestModule.ModuleVersionId.ToString("N")[..8];
+
+    /// <summary>
     /// Blazor varlıklarını tanımlayan bildirim dosyasının yolu.
     /// <para>
     /// Ad, giriş derlemesine göre aranır; masaüstü kabuğundan başlatıldığında

@@ -37,4 +37,60 @@
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    Kapsamlı (scoped) CSS paketi wwwroot'ta değil, web projesinin ara
+    çıktısında üretilir; oradan alınır. Derleme sırasında henüz var olmadığı
+    için hedef içinde toplanır, dosya listesi o anda değerlendirilsin diye.
+  -->
+  <!--
+    Blazor'ın kendi betikleri (blazor.web.js ve arkadaşları) wwwroot'ta değil,
+    çerçeveyle gelen bir NuGet paketindedir. Web projesi yayımlanırken bunlar
+    wwwroot'a taşınır; masaüstü kabuğu yayımlanmadığı için taşınmıyordu ve
+    uç nokta bildirimi dosyaları web kökünde arayıp bulamıyordu — istekler
+    500 dönüyor, arayüz tıklamalara yanıt vermiyordu.
+
+    Paket sürümü çerçeve sürümünü izler; ikisi ayrı ayrı yazılmasın diye
+    BundledNETCoreAppPackageVersion kullanılır.
+  -->
+  <PropertyGroup>
+    <CercevveVarlikYolu>$(NuGetPackageRoot)microsoft.aspnetcore.app.internal.assets\$(BundledNETCoreAppPackageVersion)\_framework\</CercevveVarlikYolu>
+  </PropertyGroup>
+
+  <Target Name="CerceveVarliklariKopyala" AfterTargets="Build">
+    <ItemGroup>
+      <CerceveVarligi Include="$(CercevveVarlikYolu)**\*" />
+    </ItemGroup>
+
+    <Error Condition="'@(CerceveVarligi)' == ''"
+           Text="Blazor çerçeve varlıkları bulunamadı: $(CercevveVarlikYolu). Bunlar olmadan arayüz etkileşimsiz açılır." />
+
+    <Copy SourceFiles="@(CerceveVarligi)"
+          DestinationFolder="$(OutDir)wwwroot\_framework\%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <!--
+    Bileşenin yanında duran betikler (ReconnectModal.razor.js) da statik
+    varlıktır ve bileşenin klasör yoluyla sunulur; wwwroot'ta değil, kaynak
+    ağacındadırlar.
+  -->
+  <ItemGroup>
+    <BilesenBetigi Include="..\Takvim.Server\Components\**\*.razor.js" />
+
+    <Content Include="@(BilesenBetigi)"
+             Link="wwwroot\Components\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="KapsamliCssKopyala" AfterTargets="Build">
+    <ItemGroup>
+      <KapsamliCss Include="..\Takvim.Server\obj\$(Configuration)\net10.0\scopedcss\bundle\Takvim.Server.styles.css" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(KapsamliCss)"
+          DestinationFolder="$(OutDir)wwwroot"
+          SkipUnchangedFiles="true"
+          Condition="Exists('%(KapsamliCss.FullPath)')" />
+  </Target>
+
 </Project>
