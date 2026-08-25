@@ -27,7 +27,9 @@
                  OnOpenTasks="() => _panel = Panel.Tasks"
                  OnOpenResources="() => _panel = Panel.Resources"
                  OnOpenAppointments="() => _panel = Panel.Appointments"
-                 OnOpenSubscriptions="() => _panel = Panel.Subscriptions" />
+                 OnOpenSubscriptions="() => _panel = Panel.Subscriptions"
+                 OnOpenMail="() => _panel = Panel.Mail"
+                 ProposalCount="_proposalCount" />
 
         <main class="icerik">
             @if (State.IsLoading)
@@ -91,6 +93,11 @@
                      OnAcceptProposal="AcceptProposal"
                      OnResetResponses="ResetResponses"
                      OnCancel="CloseAll" />
+    }
+
+    @if (_panel == Panel.Mail)
+    {
+        <MailPanel OnClose="MailPanelClosed" OnAccept="AcceptMailProposal" />
     }
 
     @if (_panel == Panel.Subscriptions)
@@ -198,7 +205,7 @@
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
     [Inject] public required IJSRuntime Js { get; set; }
 
-    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search, Tasks, Resources, Appointments, Subscriptions }
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search, Tasks, Resources, Appointments, Subscriptions, Mail }
 
     private Panel _panel = Panel.None;
 
@@ -208,6 +215,9 @@
     private LocalDateTime? _quickCreateStart;
     private LocalDate? _workScheduleDate;
     private List<Attendee> _previewAttendees = [];
+    /// <summary>Bekleyen e-posta önerisi sayısı; kenar çubuğundaki rozet.</summary>
+    private int _proposalCount;
+
     private EventOccurrence? _cancelling;
     private string _cancelReason = "";
 
@@ -232,6 +242,17 @@
         // İlk durum adres çubuğundan okunur; paylaşılan bağlantı aynı görünümü açar.
         var today = LocalDate.FromDateTime(DateTime.Today);
         await State.InitializeAsync(CalendarViewState.FromQuery(query, today));
+
+        await RefreshProposalCountAsync();
+    }
+
+    /// <summary>Kenar çubuğundaki öneri rozetini tazeler.</summary>
+    private async Task RefreshProposalCountAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+
+        _proposalCount = await scope.ServiceProvider
+            .GetRequiredService<ProposalService>().CountPendingAsync(State.ActiveUserId);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -364,6 +385,43 @@
         _panel = Panel.Editor;
 
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// E-postadan gelen öneriyi düzenleyiciye taşır ve kaydedilirse öneriyi
+    /// kapatır. Doğrudan kaydetmez: ayrıştırıcı yanılmış olabilir.
+    /// </summary>
+    /// <summary>Panel kapanınca rozet tazelenir; kullanıcı öneri yoksaymış olabilir.</summary>
+    private async Task MailPanelClosed()
+    {
+        CloseAll();
+        await RefreshProposalCountAsync();
+    }
+
+    private void AcceptMailProposal((EventDraft Draft, Guid ProposalId) accepted)
+    {
+        _draft = accepted.Draft;
+        _acceptedProposalId = accepted.ProposalId;
+        _panel = Panel.Editor;
+
+        StateHasChanged();
+    }
+
+    /// <summary>Düzenleyici bir e-posta önerisinden açıldıysa o önerinin kimliği.</summary>
+    private Guid? _acceptedProposalId;
+
+    /// <summary>Öneriden gelen etkinlik kaydedilince öneri kapatılır.</summary>
+    private async Task CloseProposalAsync(Guid eventId)
+    {
+        if (_acceptedProposalId is not { } proposalId) return;
+
+        _acceptedProposalId = null;
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var proposals = scope.ServiceProvider.GetRequiredService<ProposalService>();
+
+        await proposals.MarkAcceptedAsync(proposalId, eventId);
+        _proposalCount = await proposals.CountPendingAsync(State.ActiveUserId);
     }
 
     private async Task<List<Attendee>> LoadAttendeesAsync(Guid eventId)
@@ -563,6 +621,7 @@
                 var result = await events.CreateAsync(draft.ToInput(State.ActiveUserId));
                 await SyncAttendeesAsync(result.PrimaryEventId, draft);
                 await SyncResourcesAsync(result.PrimaryEventId, draft);
+                await CloseProposalAsync(result.PrimaryEventId);
                 return result;
             }, draft.Attendees.Count > 0 ? "Toplantı oluşturuldu ve davetler gönderildi." : "Etkinlik oluşturuldu.");
 

@@ -1883,3 +1883,20 @@ kbd {
     text-align: center;
     padding: 48px 16px;
 }
+
+/* E-postadan gelen etkinlik önerileri */
+.oneri {
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak);
+    padding: 9px;
+    margin-bottom: 6px;
+}
+
+.oneri__dayanak {
+    font-size: 11px;
+    color: var(--metin-2);
+    margin-top: 5px;
+    padding-left: 8px;
+    border-left: 2px solid var(--cizgi);
+    font-style: italic;
+}

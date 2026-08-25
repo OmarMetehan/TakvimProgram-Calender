@@ -76,6 +76,15 @@
             <span class="liste-ogesi__ad">İçe / dışa aktar</span>
         </button>
 
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenMail.InvokeAsync()">
+            <span aria-hidden="true">✉</span>
+            <span class="liste-ogesi__ad">E-postadan etkinlik</span>
+            @if (ProposalCount > 0)
+            {
+                <span class="rozet" style="background:var(--birincil);color:#fff">@ProposalCount</span>
+            }
+        </button>
+
         <button type="button" class="liste-ogesi" @onclick="() => OnOpenSubscriptions.InvokeAsync()">
             <span aria-hidden="true">📡</span>
             <span class="liste-ogesi__ad">Takvim abonelikleri</span>
@@ -129,6 +138,10 @@
     [Parameter] public EventCallback OnOpenResources { get; set; }
     [Parameter] public EventCallback OnOpenAppointments { get; set; }
     [Parameter] public EventCallback OnOpenSubscriptions { get; set; }
+    [Parameter] public EventCallback OnOpenMail { get; set; }
+
+    /// <summary>Bekleyen e-posta önerisi sayısı; sıfırsa rozet gösterilmez.</summary>
+    [Parameter] public int ProposalCount { get; set; }
 
     private Task OnDateSelected(LocalDate date)
     {

@@ -8,6 +8,7 @@ using Takvim.Data;
 using Takvim.Data.Services;
 using Takvim.Server.CalDav;
 using Takvim.Server.Components;
+using Takvim.Server.Mail;
 using Takvim.Server.State;
 
 namespace Takvim.Server;
@@ -105,6 +106,15 @@ public static class TakvimHost
         });
 
         builder.Services.AddHostedService<SubscriptionRefresher>();
+
+        // Posta kutusu bağlama ve tarama.
+        builder.Services.AddScoped<ProposalService>();
+        builder.Services.AddScoped<TakvimDbLookup>();
+        builder.Services.AddSingleton<LoopbackAuthorizer>();
+        builder.Services.AddHttpClient<MailTokenClient>();
+        builder.Services.AddHttpClient<MailReader>();
+        builder.Services.AddHttpClient<MailService>();
+        builder.Services.AddHostedService<MailScanner>();
         builder.Services.AddScoped<CalendarBootstrapper>();
 
         // Hatırlatıcı zamanlayıcısı uygulama ömrü boyunca tek örnektir; sonucu

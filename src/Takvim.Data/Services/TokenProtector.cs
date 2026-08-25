@@ -29,7 +29,12 @@ public static class TokenProtector
     /// </summary>
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("Takvim.MailToken.v1");
 
-    /// <summary>Bu işletim sisteminde güvenli saklama var mı.</summary>
+    /// <summary>
+    /// Bu işletim sisteminde güvenli saklama var mı. Öznitelik derleyiciye bu
+    /// özelliğin bir platform koruması olduğunu söyler; çağrı yerleri ayrıca
+    /// <c>OperatingSystem.IsWindows()</c> yazmak zorunda kalmaz.
+    /// </summary>
+    [SupportedOSPlatformGuard("windows")]
     public static bool IsSupported => OperatingSystem.IsWindows();
 
     [SupportedOSPlatform("windows")]

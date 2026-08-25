@@ -1,0 +1,452 @@
+@* Posta kutuları ve e-postadan çıkarılan etkinlik önerileri. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel panel--genis" role="dialog" aria-modal="true" aria-label="Posta kutuları">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">E-postadan etkinlik</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        @* ---------- Kurulum ---------- *@
+
+        @if (!_options.AnyConfigured)
+        {
+            <div class="kaynak-arama">
+                <h3 style="font-size:14px;margin:0 0 6px">Önce bir kez kurulum gerekiyor</h3>
+
+                <p style="color:var(--metin-2);margin:0 0 8px">
+                    Posta kutunuza erişmek için sağlayıcıdan bir <b>istemci kimliği</b>
+                    almanız gerekiyor. Ücretsizdir; uygulama sizin adınıza hesap açamaz,
+                    bunu bir kez sizin yapmanız gerekir.
+                </p>
+
+                <ol style="color:var(--metin-2);margin:0 0 8px;padding-left:20px;line-height:1.7">
+                    <li>Sağlayıcının geliştirici konsolunda bir proje açın.</li>
+                    <li>OAuth istemcisi oluştururken tür olarak <b>"Masaüstü uygulaması"</b> seçin.</li>
+                    <li>Verilen istemci kimliğini aşağıdaki dosyaya yazın.</li>
+                </ol>
+
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                    <a class="dugme dugme--sade" target="_blank" rel="noopener noreferrer"
+                       href="https://console.cloud.google.com/apis/credentials">Google konsolu</a>
+
+                    <a class="dugme dugme--sade" target="_blank" rel="noopener noreferrer"
+                       href="https://entra.microsoft.com">Microsoft konsolu</a>
+                </div>
+
+                <div style="font-size:12px;color:var(--metin-3)">
+                    Ayar dosyası:
+                    <code style="user-select:all">@MailOAuthOptions.ConfigPath</code>
+                </div>
+
+                <details style="margin-top:8px">
+                    <summary style="cursor:pointer;font-size:13px;color:var(--metin-2)">
+                        Dosyanın içeriği nasıl olmalı
+                    </summary>
+
+                    <pre style="font-size:11px;background:var(--yuzey-2);padding:8px;
+                                border-radius:var(--yuvarlak-s);overflow-x:auto;margin-top:6px">@SampleConfig</pre>
+                </details>
+            </div>
+        }
+
+        @* ---------- Kutular ---------- *@
+
+        <section>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <h3 style="font-size:14px;margin:0">Bağlı kutular</h3>
+                <span class="panel__bosluk"></span>
+
+                @if (_options.IsConfigured(MailProvider.Google))
+                {
+                    <button class="dugme" disabled="@_working"
+                            @onclick="() => Connect(MailProvider.Google)">+ Gmail</button>
+                }
+
+                @if (_options.IsConfigured(MailProvider.Microsoft))
+                {
+                    <button class="dugme" disabled="@_working"
+                            @onclick="() => Connect(MailProvider.Microsoft)">+ Outlook</button>
+                }
+            </div>
+
+            @if (_message is { } message)
+            {
+                <div role="alert" style="font-size:12px;margin-bottom:6px;
+                                         color:@(_failed ? "var(--tehlike)" : "var(--basari)")">
+                    @message
+                </div>
+            }
+
+            @if (_accounts.Count == 0)
+            {
+                <div style="font-size:12px;color:var(--metin-3)">
+                    Bağlı kutu yok. Kutunuzu bağladığınızda gelen postalardaki toplantılar
+                    <b>öneri olarak</b> listelenir; hiçbiri kendiliğinden takvime yazılmaz.
+                </div>
+            }
+            else
+            {
+                @foreach (var account in _accounts)
+                {
+                    <div class="kaynak-satiri @(account.IsActive ? "" : "kaynak-satiri--kapali")">
+                        <span aria-hidden="true">@(account.Provider == MailProvider.Google ? "📧" : "📨")</span>
+
+                        <span style="flex:1;min-width:0">
+                            <span style="display:block;font-weight:500;overflow:hidden;
+                                         text-overflow:ellipsis;white-space:nowrap">
+                                @account.EmailAddress
+                            </span>
+
+                            <span style="display:block;font-size:11px;color:var(--metin-3)">
+                                @ScanLabel(account) ·
+                                son
+                                <select class="alan" style="display:inline-block;width:auto;padding:1px 4px;font-size:11px"
+                                        aria-label="Geriye bakış süresi"
+                                        value="@account.LookbackDays"
+                                        @onchange="e => SetLookback(account.Id, e)">
+                                    @foreach (var days in LookbackChoices)
+                                    {
+                                        <option value="@days">@days gün</option>
+                                    }
+                                </select>
+                            </span>
+
+                            @if (account.LastError is { } error)
+                            {
+                                <span style="display:block;font-size:11px;color:var(--tehlike)">@error</span>
+                            }
+                        </span>
+
+                        <button class="dugme dugme--simge" title="Şimdi tara" disabled="@_working"
+                                aria-label="@($"{account.EmailAddress} kutusunu şimdi tara")"
+                                @onclick="() => Scan(account.Id)">⟳</button>
+
+                        <button class="dugme dugme--sade"
+                                @onclick="() => SetActive(account.Id, !account.IsActive)">
+                            @(account.IsActive ? "Duraklat" : "Sürdür")
+                        </button>
+
+                        <button class="dugme dugme--simge dugme--tehlike" title="Bağlantıyı kes"
+                                aria-label="@($"{account.EmailAddress} bağlantısını kes")"
+                                @onclick="() => Disconnect(account.Id)">✕</button>
+                    </div>
+                }
+            }
+        </section>
+
+        @* ---------- Öneriler ---------- *@
+
+        <section>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <h3 style="font-size:14px;margin:0">Öneriler (@_proposals.Count)</h3>
+                <span class="panel__bosluk"></span>
+
+                @if (_proposals.Count > 0)
+                {
+                    <button class="dugme dugme--sade" @onclick="DismissAll">Tümünü yoksay</button>
+                }
+            </div>
+
+            @if (_proposals.Count == 0)
+            {
+                <div class="bos-durum">
+                    <div class="bos-durum__baslik">Öneri yok</div>
+                    <div>Toplantı içeren bir posta geldiğinde burada belirir.</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var proposal in _proposals)
+                {
+                    <div class="oneri">
+                        <div style="display:flex;gap:8px;align-items:flex-start">
+                            <span aria-hidden="true" style="font-size:16px">✉</span>
+
+                            <div style="flex:1;min-width:0">
+                                <div style="font-weight:500">@proposal.Title</div>
+
+                                <div style="font-size:12px;color:var(--metin-2)">
+                                    @if (proposal.RecognizedSchedule)
+                                    {
+                                        <span>@TurkishFormat.DateTime(proposal.StartLocal) –
+                                              @TurkishFormat.Time(proposal.EndLocal)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="yanit yanit--belirsiz">saat bulunamadı</span>
+                                    }
+
+                                    @if (!string.IsNullOrWhiteSpace(proposal.LocationText))
+                                    {
+                                        <span> · 📍 @proposal.LocationText</span>
+                                    }
+
+                                    @if (!string.IsNullOrWhiteSpace(proposal.OnlineMeetingUrl))
+                                    {
+                                        <span> · 🔗 çevrimiçi</span>
+                                    }
+                                </div>
+
+                                <div style="font-size:11px;color:var(--metin-3);margin-top:2px">
+                                    @proposal.From · @proposal.Subject
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(proposal.Snippet))
+                                {
+                                    <div class="oneri__dayanak">"@proposal.Snippet"</div>
+                                }
+                            </div>
+
+                            <button class="dugme" @onclick="() => Dismiss(proposal.Id)">Yoksay</button>
+                            <button class="dugme dugme--birincil"
+                                    @onclick="() => Accept(proposal)">Düzenle ve ekle</button>
+                        </div>
+                    </div>
+                }
+            }
+        </section>
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Öneri kabul edilince düzenleyici bu taslakla açılır.</summary>
+    [Parameter] public EventCallback<(EventDraft Draft, Guid ProposalId)> OnAccept { get; set; }
+
+    private static readonly int[] LookbackChoices = [3, 7, 14, 30, 60, 90];
+
+    private MailOAuthOptions _options = new();
+    private List<MailAccount> _accounts = [];
+    private List<EventProposal> _proposals = [];
+
+    private bool _working;
+    private string? _message;
+    private bool _failed;
+
+    /// <summary>Kurulum yönergesinde gösterilen örnek dosya.</summary>
+    private const string SampleConfig = """
+        {
+          "google": {
+            "clientId": "1234567890-abc.apps.googleusercontent.com",
+            "clientSecret": "GOCSPX-..."
+          },
+          "microsoft": {
+            "clientId": "00000000-0000-0000-0000-000000000000"
+          },
+          "scanIntervalMinutes": 30
+        }
+        """;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _options = MailOAuthOptions.Load();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var proposals = scope.ServiceProvider.GetRequiredService<ProposalService>();
+
+        _accounts = await proposals.GetAccountsAsync(State.ActiveUserId);
+        _proposals = await proposals.GetPendingAsync(State.ActiveUserId);
+    }
+
+    // ------------------------------------------------------------------
+    // Kutular
+    // ------------------------------------------------------------------
+
+    private async Task Connect(MailProvider provider)
+    {
+        _working = true;
+        Report("Tarayıcı açıldı; giriş yapmanız bekleniyor…", failed: false);
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+
+            var result = await scope.ServiceProvider
+                .GetRequiredService<MailService>().ConnectAsync(State.ActiveUserId, provider);
+
+            Report(result.Success
+                ? $"{result.Account!.EmailAddress} bağlandı."
+                : result.Error!,
+                failed: !result.Success);
+        }
+        finally
+        {
+            _working = false;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task Scan(Guid accountId)
+    {
+        _working = true;
+        Report("Taranıyor…", failed: false);
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+            var provider = scope.ServiceProvider;
+
+            var account = await provider.GetRequiredService<ProposalService>()
+                .FindAccountAsync(accountId);
+
+            if (account is null) return;
+
+            var result = await provider.GetRequiredService<MailService>()
+                .ScanAsync(account, State.ZoneId);
+
+            Report(result.Success
+                ? result.NewProposals == 0 ? "Yeni öneri çıkmadı." : $"{result.NewProposals} yeni öneri."
+                : result.Error!,
+                failed: !result.Success);
+        }
+        finally
+        {
+            _working = false;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task SetActive(Guid accountId, bool isActive)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ProposalService>()
+                .SetActiveAsync(accountId, isActive);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task SetLookback(Guid accountId, ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var days)) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ProposalService>()
+                .SetLookbackAsync(accountId, days);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task Disconnect(Guid accountId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ProposalService>()
+                .DisconnectAsync(accountId);
+        }
+
+        Report("Bağlantı kesildi.", failed: false);
+        await LoadAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Öneriler
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Öneriyi düzenleyiciye taşır. Doğrudan kaydetmez: ayrıştırıcı yanılmış
+    /// olabilir ve kullanıcı kaydetmeden önce görmeli.
+    /// </summary>
+    private async Task Accept(EventProposal proposal)
+    {
+        var calendar = State.DefaultCalendar;
+        if (calendar is null) return;
+
+        var draft = EventDraft.ForNewEvent(
+            calendar.Id, proposal.StartLocal, proposal.EndLocal,
+            proposal.IsAllDay, State.ZoneId, calendar.DefaultReminderMinutes);
+
+        draft.Title = proposal.Title;
+        draft.LocationText = proposal.LocationText;
+        draft.OnlineMeetingUrl = proposal.OnlineMeetingUrl;
+        draft.OnlineMeetingProvider = Takvim.Core.Scheduling.MeetingLinks.DetectProvider(proposal.OnlineMeetingUrl);
+        draft.DescriptionHtml = BuildDescription(proposal);
+
+        await OnAccept.InvokeAsync((draft, proposal.Id));
+    }
+
+    /// <summary>Önerinin kaynağını açıklamaya yazar; nereden geldiği kaybolmasın.</summary>
+    private static string BuildDescription(EventProposal proposal)
+    {
+        var lines = new List<string> { $"E-postadan: {proposal.Subject}" };
+
+        if (!string.IsNullOrWhiteSpace(proposal.From)) lines.Add($"Gönderen: {proposal.From}");
+
+        if (!string.IsNullOrWhiteSpace(proposal.Snippet))
+        {
+            lines.Add(string.Empty);
+            lines.Add("> " + proposal.Snippet);
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private async Task Dismiss(Guid proposalId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ProposalService>().DismissAsync(proposalId);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task DismissAll()
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ProposalService>()
+                .DismissAllAsync(State.ActiveUserId);
+        }
+
+        await LoadAsync();
+    }
+
+    // ------------------------------------------------------------------
+
+    private void Report(string message, bool failed)
+    {
+        _message = message;
+        _failed = failed;
+    }
+
+    private string ScanLabel(MailAccount account)
+    {
+        if (account.LastScanAt is not { } last) return "hiç taranmadı";
+
+        var elapsed = State.ToInstant(State.Now) - Instant.FromDateTimeOffset(last);
+
+        return elapsed.TotalMinutes switch
+        {
+            < 2 => "az önce tarandı",
+            < 60 => $"{(int)elapsed.TotalMinutes} dakika önce tarandı",
+            < 24 * 60 => $"{(int)elapsed.TotalHours} saat önce tarandı",
+            _ => $"{(int)elapsed.TotalDays} gün önce tarandı",
+        };
+    }
+}
