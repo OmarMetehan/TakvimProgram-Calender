@@ -95,6 +95,16 @@ public static class TakvimHost
         builder.Services.AddScoped<TaskService>();
         builder.Services.AddScoped<ResourceService>();
         builder.Services.AddScoped<AppointmentService>();
+
+        // Abonelik beslemelerini çeken tek istemci. Yönlendirme izlenir ama
+        // kimlik bilgisi taşınmaz: beslemeler herkese açık adreslerdir.
+        builder.Services.AddHttpClient<SubscriptionService>(client =>
+        {
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Takvim/1.0");
+            client.DefaultRequestHeaders.Accept.ParseAdd("text/calendar, text/plain;q=0.8");
+        });
+
+        builder.Services.AddHostedService<SubscriptionRefresher>();
         builder.Services.AddScoped<CalendarBootstrapper>();
 
         // Hatırlatıcı zamanlayıcısı uygulama ömrü boyunca tek örnektir; sonucu

@@ -76,6 +76,11 @@
             <span class="liste-ogesi__ad">İçe / dışa aktar</span>
         </button>
 
+        <button type="button" class="liste-ogesi" @onclick="() => OnOpenSubscriptions.InvokeAsync()">
+            <span aria-hidden="true">📡</span>
+            <span class="liste-ogesi__ad">Takvim abonelikleri</span>
+        </button>
+
         <button type="button" class="liste-ogesi" @onclick="() => OnOpenAppointments.InvokeAsync()">
             <span aria-hidden="true">🗓</span>
             <span class="liste-ogesi__ad">Randevu sayfaları</span>
@@ -123,6 +128,7 @@
     [Parameter] public EventCallback OnOpenTasks { get; set; }
     [Parameter] public EventCallback OnOpenResources { get; set; }
     [Parameter] public EventCallback OnOpenAppointments { get; set; }
+    [Parameter] public EventCallback OnOpenSubscriptions { get; set; }
 
     private Task OnDateSelected(LocalDate date)
     {

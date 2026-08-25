@@ -65,6 +65,7 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Color).HasMaxLength(32);
             e.Property(x => x.TimeZoneId).HasMaxLength(64);
+            e.Property(x => x.SourceUrl).HasMaxLength(2000);
             e.HasOne(x => x.Owner).WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.OwnerUserId, x.SortOrder });
             e.HasIndex(x => x.DeletedAt);

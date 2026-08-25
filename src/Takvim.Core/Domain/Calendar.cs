@@ -39,15 +39,18 @@ public class Calendar
     public int? DefaultAllDayReminderMinutes { get; set; } = 12 * 60;
 
     // --- Abone takvimler ---
-    // NOT: Bu iki alan ileriye dönük ayrılmıştır; dış ICS beslemesine abonelik
-    // henüz uygulanmadı. Şu an hiçbir kod bunları okumuyor ya da yazmıyor.
-    // Sütun eklemek şema göçü gerektirdiği için baştan tanımlandılar.
 
-    /// <summary>Dış ICS beslemesinin adresi. Abonelik uygulanana kadar kullanılmaz.</summary>
+    /// <summary>
+    /// Dış ICS beslemesinin adresi. Yalnızca <see cref="CalendarKind.Subscribed"/>
+    /// takvimlerde doludur.
+    /// </summary>
     public string? SourceUrl { get; set; }
 
-    /// <summary>Beslemenin en son ne zaman çekildiği. Abonelik uygulanana kadar kullanılmaz.</summary>
+    /// <summary>Beslemenin en son ne zaman çekildiği. Hiç çekilmediyse null.</summary>
     public DateTimeOffset? LastSyncedAt { get; set; }
+
+    /// <summary>Beslemenin kaç dakikada bir tazeleneceği.</summary>
+    public int RefreshMinutes { get; set; } = 360;
 
     // --- Senkronizasyon meta verisi ---
 

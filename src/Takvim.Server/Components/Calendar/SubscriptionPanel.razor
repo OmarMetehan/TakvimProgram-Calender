@@ -1,0 +1,277 @@
+@* Dış ICS beslemelerine abonelik. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel" role="dialog" aria-modal="true" aria-label="Takvim abonelikleri">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Takvim abonelikleri</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        <p style="color:var(--metin-2);margin:0">
+            Bir iş arkadaşınızın ya da bir kurumun yayımladığı takvim adresini
+            ekleyin; içeriği düzenli olarak çekilip salt okunur bir takvim
+            olarak gösterilir. Meşguliyeti zamanlama yardımcısında da görünür.
+        </p>
+
+        <div>
+            <label class="etiket" for="abone-adres">Takvim adresi</label>
+
+            <div style="display:flex;gap:6px">
+                <input id="abone-adres" class="alan" style="flex:1"
+                       placeholder="https://… veya webcal://…"
+                       @bind="_url" @bind:event="oninput" @onkeydown="OnUrlKey" />
+
+                <button class="dugme dugme--birincil"
+                        disabled="@(_working || string.IsNullOrWhiteSpace(_url))"
+                        @onclick="Subscribe">
+                    @(_working ? "Çekiliyor…" : "Ekle")
+                </button>
+            </div>
+
+            <div style="font-size:11px;color:var(--metin-3);margin-top:4px">
+                Adres herkese açık olmalı; parola isteyen bağlantılar çekilemez.
+            </div>
+        </div>
+
+        @if (_message is { } message)
+        {
+            <div role="alert" style="font-size:12px;color:@(_failed ? "var(--tehlike)" : "var(--basari)")">
+                @message
+            </div>
+        }
+
+        @if (_subscriptions.Count == 0)
+        {
+            <div class="bos-durum">
+                <div class="bos-durum__baslik">Abonelik yok</div>
+                <div>Resmi tatil, spor fikstürü ya da ekip takvimi adresi ekleyebilirsiniz.</div>
+            </div>
+        }
+        else
+        {
+            @foreach (var subscription in _subscriptions)
+            {
+                <div class="kaynak-satiri renk-@subscription.Color" style="align-items:flex-start">
+                    <span class="renk-noktasi" style="margin-top:5px"></span>
+
+                    <span style="flex:1;min-width:0">
+                        <input class="alan" style="font-weight:500"
+                               aria-label="Takvim adı"
+                               value="@subscription.Name"
+                               @onchange="e => Rename(subscription.Id, e)" />
+
+                        <span style="display:block;font-size:11px;color:var(--metin-3);
+                                     overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                              title="@subscription.SourceUrl">
+                            @subscription.SourceUrl
+                        </span>
+
+                        <span style="display:block;font-size:11px;color:var(--metin-3);margin-top:2px">
+                            @LastSyncLabel(subscription) ·
+                            <select class="alan" style="display:inline-block;width:auto;padding:1px 4px;font-size:11px"
+                                    aria-label="Tazeleme sıklığı"
+                                    value="@subscription.RefreshMinutes"
+                                    @onchange="e => SetRefresh(subscription.Id, e)">
+                                @foreach (var (minutes, label) in RefreshChoices)
+                                {
+                                    <option value="@minutes">@label</option>
+                                }
+                            </select>
+                        </span>
+                    </span>
+
+                    <button class="dugme dugme--simge" title="Şimdi tazele"
+                            aria-label="@($"{subscription.Name} takvimini şimdi tazele")"
+                            disabled="@_working"
+                            @onclick="() => Refresh(subscription.Id)">⟳</button>
+
+                    <button class="dugme dugme--simge dugme--tehlike" title="Abonelikten çık"
+                            aria-label="@($"{subscription.Name} aboneliğinden çık")"
+                            @onclick="() => Unsubscribe(subscription.Id)">✕</button>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Abonelik değişince ızgara ve takvim listesi tazelensin diye.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private static readonly (int Minutes, string Label)[] RefreshChoices =
+    [
+        (15, "15 dakikada bir"),
+        (60, "saatte bir"),
+        (360, "6 saatte bir"),
+        (1440, "günde bir"),
+        (10080, "haftada bir"),
+    ];
+
+    private List<Calendar> _subscriptions = [];
+    private string _url = string.Empty;
+    private string? _message;
+    private bool _failed;
+    private bool _working;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+
+        _subscriptions = await scope.ServiceProvider
+            .GetRequiredService<SubscriptionService>().GetSubscriptionsAsync(State.ActiveUserId);
+    }
+
+    private async Task OnUrlKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Subscribe();
+    }
+
+    private async Task Subscribe()
+    {
+        if (string.IsNullOrWhiteSpace(_url)) return;
+
+        if (SubscriptionService.NormalizeUrl(_url) is null)
+        {
+            Report("Adres geçersiz. http:// veya https:// ile başlamalı.", failed: true);
+            return;
+        }
+
+        _working = true;
+        _message = null;
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+
+            var (calendar, result) = await scope.ServiceProvider
+                .GetRequiredService<SubscriptionService>()
+                .SubscribeAsync(State.ActiveUserId, _url);
+
+            // Çekim başarısız olsa da abonelik kalır; kullanıcı sonra tazeler.
+            Report(result.Success
+                ? $"\"{calendar.Name}\" eklendi, {result.EventCount} etkinlik çekildi."
+                : $"Takvim eklendi ama içeriği çekilemedi: {result.Error}",
+                failed: !result.Success);
+
+            _url = string.Empty;
+        }
+        finally
+        {
+            _working = false;
+        }
+
+        await AfterChangeAsync();
+    }
+
+    private async Task Refresh(Guid calendarId)
+    {
+        _working = true;
+        _message = null;
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+
+            var result = await scope.ServiceProvider
+                .GetRequiredService<SubscriptionService>().RefreshAsync(calendarId);
+
+            Report(result.Success
+                ? $"Tazelendi: {result.EventCount} etkinlik."
+                : result.Error!,
+                failed: !result.Success);
+        }
+        finally
+        {
+            _working = false;
+        }
+
+        await AfterChangeAsync();
+    }
+
+    private async Task Unsubscribe(Guid calendarId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider
+                .GetRequiredService<SubscriptionService>().UnsubscribeAsync(calendarId);
+        }
+
+        Report("Abonelikten çıkıldı.", failed: false);
+        await AfterChangeAsync();
+    }
+
+    private async Task Rename(Guid calendarId, ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider
+                .GetRequiredService<SubscriptionService>().UpdateAsync(calendarId, name: name);
+        }
+
+        await AfterChangeAsync();
+    }
+
+    private async Task SetRefresh(Guid calendarId, ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var minutes)) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider
+                .GetRequiredService<SubscriptionService>()
+                .UpdateAsync(calendarId, refreshMinutes: minutes);
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>Takvim listesi ve ızgara birlikte tazelenir; ikisi de değişmiş olabilir.</summary>
+    private async Task AfterChangeAsync()
+    {
+        await State.LoadUserContextAsync();
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private void Report(string message, bool failed)
+    {
+        _message = message;
+        _failed = failed;
+    }
+
+    private string LastSyncLabel(Calendar subscription)
+    {
+        if (subscription.LastSyncedAt is not { } last) return "hiç çekilmedi";
+
+        var elapsed = State.ToInstant(State.Now) - Instant.FromDateTimeOffset(last);
+
+        return elapsed.TotalMinutes switch
+        {
+            < 2 => "az önce çekildi",
+            < 60 => $"{(int)elapsed.TotalMinutes} dakika önce",
+            < 24 * 60 => $"{(int)elapsed.TotalHours} saat önce",
+            _ => $"{(int)elapsed.TotalDays} gün önce",
+        };
+    }
+}
