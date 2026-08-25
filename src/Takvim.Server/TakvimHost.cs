@@ -23,7 +23,15 @@ public static class TakvimHost
     /// <summary>Uygulamayı kurar ama başlatmaz.</summary>
     /// <param name="args">Komut satırı bağımsız değişkenleri.</param>
     /// <param name="urls">Dinlenecek adresler. Masaüstü kabuğu rastgele bir yerel port verir.</param>
-    public static WebApplication Build(string[]? args = null, string? urls = null)
+    /// <param name="useStaticAssetManifest">
+    /// Blazor'ın statik varlık bildirimi kullanılsın mı. Web olarak
+    /// çalıştırıldığında evet: parmak izli adresleri ve önceden sıkıştırılmış
+    /// kopyaları o yönetir. Masaüstü kabuğunda hayır — kabuk kendi wwwroot
+    /// klasörünü kurar ve sıkıştırılmış kopyalar orada yoktur; bildirim yine de
+    /// onları sunmaya çalışıp <b>boş yanıt</b> döndürür.
+    /// </param>
+    public static WebApplication Build(
+        string[]? args = null, string? urls = null, bool useStaticAssetManifest = true)
     {
         // İçerik kökü açıkça uygulamanın kendi klasörüdür. Varsayılan çalışma
         // dizinidir; masaüstü kabuğuna çift tıklandığında çalışma dizini
@@ -155,18 +163,20 @@ public static class TakvimHost
             context => !context.Request.Path.StartsWithSegments("/dav"),
             branch => branch.UseStatusCodePagesWithReExecute(
                 "/bulunamadi", createScopeForStatusCodePages: true));
+
+        // Dosya sunumu yönlendirmeden önce gelir. Sonraya kalırsa bir uç nokta
+        // seçilmiş olur ve StaticFileMiddleware bu durumda kendini devre dışı
+        // bırakır; istek, dosyayı sunamayacak bir uç noktaya gider.
+        app.UseStaticFiles();
+
         app.UseAntiforgery();
 
-        // Statik varlık bildirimi giriş derlemesinin adına göre aranır. Masaüstü
-        // kabuğundan başlatıldığında giriş derlemesi Takvim.exe olduğu için
-        // bildirim bulunamaz; bu yüzden dosya adı açıkça verilir.
-        // İki yol birlikte durur. MapStaticAssets parmak izli adresleri sunar ve
-        // önbelleklemeyi doğru kurar; ama bildirimi yalnızca web projesinin
-        // kendi çıktısında bulur. Masaüstü kabuğundan başlatıldığında bildirim
-        // yüklenemez, @Assets sade adı döndürür ve o adı UseStaticFiles karşılar.
-        // Yalnızca birine güvenmek, uygulamayı biçimsiz açılmaya açık bırakıyordu.
-        app.UseStaticFiles();
-        app.MapStaticAssets(StaticAssetsManifest);
+        if (useStaticAssetManifest)
+        {
+            // Bildirim giriş derlemesinin adına göre aranır; masaüstü kabuğunda
+            // giriş derlemesi Takvim.exe olduğu için adı açıkça verilir.
+            app.MapStaticAssets(StaticAssetsManifest);
+        }
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
         app.MapCalDav();
 

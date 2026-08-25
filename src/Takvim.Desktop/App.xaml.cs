@@ -41,7 +41,11 @@ public partial class App : Application
         {
             window.SetStatus("Veritabanı hazırlanıyor…");
 
-            _server = TakvimHost.Build(args: null, urls: "http://127.0.0.1:0");
+            // Kabuk kendi wwwroot klasörünü kurar; Blazor'ın statik varlık bildirimi
+            // kullanılmaz. Kullanılsaydı, önceden sıkıştırılmış kopyaları bulamayıp
+            // tarayıcıya boş stil ve betik gönderirdi.
+            _server = TakvimHost.Build(
+                args: null, urls: "http://127.0.0.1:0", useStaticAssetManifest: false);
             await TakvimHost.InitializeDatabaseAsync(_server);
 
             window.SetStatus("Sunucu başlatılıyor…");
