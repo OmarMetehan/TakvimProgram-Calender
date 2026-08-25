@@ -1,0 +1,489 @@
+@* Gelişmiş arama: ölçüt formu, sonuç listesi ve kaydedilmiş aramalar. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel panel--genis" role="dialog" aria-modal="true" aria-label="Gelişmiş arama">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Gelişmiş arama</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        @if (_saved.Count > 0)
+        {
+            <div>
+                <span class="etiket">Kayıtlı aramalar</span>
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                    @foreach (var saved in _saved)
+                    {
+                        <span class="sablon-rozeti">
+                            <button type="button" class="sablon-rozeti__ad"
+                                    @onclick="() => LoadSaved(saved.Id)">@saved.Name</button>
+
+                            <button type="button" class="sablon-rozeti__sil"
+                                    title="Aramayı sil" aria-label="@($"{saved.Name} aramasını sil")"
+                                    @onclick="() => DeleteSaved(saved.Id)">✕</button>
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+
+        @* ---------- Ölçütler ---------- *@
+
+        <div>
+            <label class="etiket" for="arama-metin">Aranan</label>
+            <input id="arama-metin" class="alan" placeholder="Başlık, açıklama, gündem, konum veya katılımcı"
+                   @bind="_criteria" @bind:event="oninput" @onkeydown="OnKey" />
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+                <label class="etiket" for="arama-aralik">Zaman aralığı</label>
+                <select id="arama-aralik" class="alan" @bind="Range">
+                    <option value="@SearchRange.Upcoming">Bugünden ileriye</option>
+                    <option value="@SearchRange.Past">Bugünden geriye</option>
+                    <option value="@SearchRange.ThisYear">Bu yıl</option>
+                    <option value="@SearchRange.All">Tümü</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="etiket" for="arama-mesguliyet">Meşguliyet</label>
+                <select id="arama-mesguliyet" class="alan" @bind="AvailabilityChoice">
+                    <option value="">Farketmez</option>
+                    <option value="@Availability.Busy">Meşgul</option>
+                    <option value="@Availability.Free">Müsait</option>
+                    <option value="@Availability.Tentative">Belirsiz</option>
+                    <option value="@Availability.OutOfOffice">Ofis dışı</option>
+                    <option value="@Availability.FocusTime">Odaklanma zamanı</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+                <label class="etiket" for="arama-duzenleyen">Düzenleyen</label>
+                <select id="arama-duzenleyen" class="alan" @bind="OrganizerChoice">
+                    <option value="">Farketmez</option>
+                    @foreach (var user in State.Users)
+                    {
+                        <option value="@user.Id">@user.DisplayName</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="etiket" for="arama-katilimci">Katılımcı</label>
+                <select id="arama-katilimci" class="alan" @bind="AttendeeChoice">
+                    <option value="">Farketmez</option>
+                    @foreach (var user in State.Users)
+                    {
+                        <option value="@user.Id">@user.DisplayName</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div>
+            <span class="etiket">Takvimler</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+                @foreach (var calendar in State.Calendars)
+                {
+                    var selected = _calendarIds.Contains(calendar.Id);
+
+                    <button type="button" class="rozet renk-@calendar.Color"
+                            style="border:1px solid @(selected ? "var(--olay-renk)" : "var(--cizgi)")"
+                            aria-pressed="@(selected ? "true" : "false")"
+                            @onclick="() => Toggle(_calendarIds, calendar.Id)">
+                        <span class="renk-noktasi" style="width:8px;height:8px;border-radius:50%"></span>
+                        @calendar.Name
+                    </button>
+                }
+            </div>
+        </div>
+
+        @if (State.Categories.Count > 0)
+        {
+            <div>
+                <span class="etiket">Kategoriler</span>
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                    @foreach (var category in State.Categories)
+                    {
+                        var selected = _categoryIds.Contains(category.Id);
+
+                        <button type="button" class="rozet renk-@category.Color"
+                                style="border:1px solid @(selected ? "var(--olay-renk)" : "var(--cizgi)")"
+                                aria-pressed="@(selected ? "true" : "false")"
+                                @onclick="() => Toggle(_categoryIds, category.Id)">
+                            <span class="renk-noktasi" style="width:8px;height:8px;border-radius:50%"></span>
+                            @category.Name
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+
+        <div>
+            <span class="etiket">Özellikler</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+                @foreach (var flag in Flags)
+                {
+                    <button type="button" class="rozet uc-durum"
+                            style="border:1px solid @(flag.Get(this) is null ? "var(--cizgi)" : "var(--birincil)")"
+                            title="Tıkladıkça: farketmez → evet → hayır"
+                            @onclick="() => Cycle(flag)">
+                        @Mark(flag.Get(this)) @flag.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        <label class="liste-ogesi" style="padding-left:0">
+            <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                   checked="@_includeCancelled"
+                   @onchange="e => _includeCancelled = (bool)(e.Value ?? false)" />
+            <span class="liste-ogesi__ad">İptal edilenler de gösterilsin</span>
+        </label>
+
+        @* ---------- Sonuçlar ---------- *@
+
+        @if (_ran)
+        {
+            <div style="border-top:1px solid var(--cizgi);padding-top:10px">
+                @if (_results.Count == 0)
+                {
+                    <div class="bos-durum">
+                        <div class="bos-durum__baslik">Sonuç yok</div>
+                        <div>Ölçütleri gevşetmeyi deneyin.</div>
+                    </div>
+                }
+                else
+                {
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                        <span class="etiket" style="margin:0">
+                            @_results.Count sonuç@(_results.Count >= SearchService.MaxResults ? " (ilk " + SearchService.MaxResults + ")" : "")
+                        </span>
+
+                        <span class="panel__bosluk"></span>
+
+                        @if (_naming)
+                        {
+                            <input class="alan" style="max-width:200px" placeholder="Aramanın adı"
+                                   aria-label="Aramanın adı" @bind="_name" @bind:event="oninput"
+                                   @onkeydown="OnNameKey" />
+
+                            <button class="dugme dugme--birincil"
+                                    disabled="@string.IsNullOrWhiteSpace(_name)"
+                                    @onclick="SaveSearch">Kaydet</button>
+                        }
+                        else
+                        {
+                            <button class="dugme dugme--sade" @onclick="() => _naming = true">
+                                ☆ Aramayı kaydet
+                            </button>
+                        }
+                    </div>
+
+                    @foreach (var group in _results.GroupBy(o => o.StartLocal.Date))
+                    {
+                        <div class="arama-gun">@TurkishFormat.LongDate(group.Key)</div>
+
+                        @foreach (var occurrence in group)
+                        {
+                            <button type="button" class="arama-sonuc renk-@State.ColorOf(occurrence)"
+                                    @onclick="() => Open(occurrence)">
+                                <span class="renk-noktasi"></span>
+
+                                <span class="arama-sonuc__saat">
+                                    @(occurrence.Source.IsAllDay ? "Tüm gün" : TurkishFormat.Time(occurrence.StartLocal))
+                                </span>
+
+                                <span class="arama-sonuc__baslik">
+                                    @occurrence.DisplayTitle
+
+                                    @if (!string.IsNullOrWhiteSpace(occurrence.DisplayLocation))
+                                    {
+                                        <span style="color:var(--metin-3)"> · @occurrence.DisplayLocation</span>
+                                    }
+                                </span>
+
+                                @if (occurrence.Source.Status == EventStatus.Cancelled)
+                                {
+                                    <span class="rozet" style="color:var(--tehlike)">iptal</span>
+                                }
+                            </button>
+                        }
+                    }
+                }
+            </div>
+        }
+    </div>
+
+    <div class="panel__alt">
+        <button class="dugme" @onclick="Clear">Temizle</button>
+        <span class="panel__bosluk"></span>
+        <button class="dugme dugme--birincil" disabled="@_running" @onclick="Run">
+            @(_running ? "Aranıyor…" : "Ara")
+        </button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Bir sonuca tıklandığında; sayfa o güne gidip etkinliği açar.</summary>
+    [Parameter] public EventCallback<EventOccurrence> OnOpen { get; set; }
+
+    private string _criteria = string.Empty;
+    private SearchRange _range = SearchRange.Upcoming;
+    private Availability? _availability;
+    private Guid? _organizerUserId;
+    private Guid? _attendeeUserId;
+
+    private readonly List<Guid> _calendarIds = [];
+    private readonly List<Guid> _categoryIds = [];
+
+    private bool? _hasAttendees;
+    private bool? _isRecurring;
+    private bool? _isAllDay;
+    private bool? _hasAttachments;
+    private bool? _hasOnlineMeeting;
+
+    private bool _includeCancelled;
+
+    private List<EventOccurrence> _results = [];
+    private List<SavedSearch> _saved = [];
+
+    private bool _ran;
+    private bool _running;
+    private bool _naming;
+    private string _name = string.Empty;
+
+    // ------------------------------------------------------------------
+    // Üç durumlu özellik düğmeleri
+    // ------------------------------------------------------------------
+
+    /// <summary>Evet/hayır/farketmez arasında dönen bir ölçüt.</summary>
+    private sealed record Flag(string Label, Func<SearchPanel, bool?> Get, Action<SearchPanel, bool?> Set);
+
+    private static readonly Flag[] Flags =
+    [
+        new("Davetlisi var", p => p._hasAttendees, (p, v) => p._hasAttendees = v),
+        new("Tekrarlayan", p => p._isRecurring, (p, v) => p._isRecurring = v),
+        new("Tüm gün", p => p._isAllDay, (p, v) => p._isAllDay = v),
+        new("Eki var", p => p._hasAttachments, (p, v) => p._hasAttachments = v),
+        new("Çevrimiçi", p => p._hasOnlineMeeting, (p, v) => p._hasOnlineMeeting = v),
+    ];
+
+    private static string Mark(bool? value) => value switch
+    {
+        true => "✓",
+        false => "✕",
+        _ => "·",
+    };
+
+    private void Cycle(Flag flag)
+        => flag.Set(this, flag.Get(this) switch
+        {
+            null => true,
+            true => false,
+            false => null,
+        });
+
+    // ------------------------------------------------------------------
+    // Formun bağlanabilir kılıfları
+    //
+    // <select> metin taşır; enum ve Guid? alanlara doğrudan bağlanamazlar.
+    // ------------------------------------------------------------------
+
+    private string Range
+    {
+        get => _range.ToString();
+        set => _range = Enum.TryParse<SearchRange>(value, out var parsed) ? parsed : SearchRange.Upcoming;
+    }
+
+    private string AvailabilityChoice
+    {
+        get => _availability?.ToString() ?? string.Empty;
+        set => _availability = Enum.TryParse<Availability>(value, out var parsed) ? parsed : null;
+    }
+
+    private string OrganizerChoice
+    {
+        get => _organizerUserId?.ToString() ?? string.Empty;
+        set => _organizerUserId = Guid.TryParse(value, out var parsed) ? parsed : null;
+    }
+
+    private string AttendeeChoice
+    {
+        get => _attendeeUserId?.ToString() ?? string.Empty;
+        set => _attendeeUserId = Guid.TryParse(value, out var parsed) ? parsed : null;
+    }
+
+    private static void Toggle(List<Guid> list, Guid id)
+    {
+        if (!list.Remove(id)) list.Add(id);
+    }
+
+    // ------------------------------------------------------------------
+
+    protected override async Task OnInitializedAsync() => await LoadSavedAsync();
+
+    private async Task LoadSavedAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        _saved = await scope.ServiceProvider
+            .GetRequiredService<SearchService>().GetSavedAsync(State.ActiveUserId);
+    }
+
+    private SearchCriteria Current => new()
+    {
+        Term = string.IsNullOrWhiteSpace(_criteria) ? null : _criteria.Trim(),
+        Range = _range,
+        CalendarIds = [.. _calendarIds],
+        CategoryIds = [.. _categoryIds],
+        Availabilities = _availability is { } a ? [a] : [],
+        OrganizerUserId = _organizerUserId,
+        AttendeeUserId = _attendeeUserId,
+        HasAttendees = _hasAttendees,
+        IsRecurring = _isRecurring,
+        IsAllDay = _isAllDay,
+        HasAttachments = _hasAttachments,
+        HasOnlineMeeting = _hasOnlineMeeting,
+        IncludeCancelled = _includeCancelled,
+    };
+
+    private void Apply(SearchCriteria criteria)
+    {
+        _criteria = criteria.Term ?? string.Empty;
+        _range = criteria.Range;
+
+        _calendarIds.Clear();
+        _calendarIds.AddRange(criteria.CalendarIds);
+
+        _categoryIds.Clear();
+        _categoryIds.AddRange(criteria.CategoryIds);
+
+        _availability = criteria.Availabilities.Count > 0 ? criteria.Availabilities[0] : null;
+        _organizerUserId = criteria.OrganizerUserId;
+        _attendeeUserId = criteria.AttendeeUserId;
+        _hasAttendees = criteria.HasAttendees;
+        _isRecurring = criteria.IsRecurring;
+        _isAllDay = criteria.IsAllDay;
+        _hasAttachments = criteria.HasAttachments;
+        _hasOnlineMeeting = criteria.HasOnlineMeeting;
+        _includeCancelled = criteria.IncludeCancelled;
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Run();
+    }
+
+    private async Task Run()
+    {
+        var criteria = Current;
+
+        if (criteria.IsEmpty)
+        {
+            _results = [];
+            _ran = true;
+            return;
+        }
+
+        _running = true;
+
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+
+            _results = await scope.ServiceProvider
+                .GetRequiredService<SearchService>()
+                .RunAsync(State.ActiveUserId, criteria, State.ZoneId);
+        }
+        finally
+        {
+            _running = false;
+            _ran = true;
+        }
+    }
+
+    private void Clear()
+    {
+        Apply(new SearchCriteria());
+
+        _results = [];
+        _ran = false;
+        _naming = false;
+    }
+
+    private async Task Open(EventOccurrence occurrence)
+    {
+        await OnOpen.InvokeAsync(occurrence);
+        await OnClose.InvokeAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Kaydedilmiş aramalar
+    // ------------------------------------------------------------------
+
+    private async Task OnNameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveSearch();
+        else if (e.Key == "Escape") _naming = false;
+    }
+
+    private async Task SaveSearch()
+    {
+        if (string.IsNullOrWhiteSpace(_name)) return;
+
+        await using var scope = Scopes.CreateAsyncScope();
+        var searches = scope.ServiceProvider.GetRequiredService<SearchService>();
+
+        var saved = await searches.SaveAsync(State.ActiveUserId, _name, Current);
+
+        if (saved is null)
+        {
+            State.ShowStatus($"En fazla {SearchService.MaxPerUser} arama kaydedilebilir.");
+            return;
+        }
+
+        _saved = await searches.GetSavedAsync(State.ActiveUserId);
+        _naming = false;
+        _name = string.Empty;
+
+        State.ShowStatus($"\"{saved.Name}\" araması kaydedildi.");
+    }
+
+    private async Task LoadSaved(Guid savedSearchId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var criteria = await scope.ServiceProvider
+                .GetRequiredService<SearchService>().UseAsync(savedSearchId);
+
+            if (criteria is null) return;
+
+            Apply(criteria);
+        }
+
+        await Run();
+    }
+
+    private async Task DeleteSaved(Guid savedSearchId)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var searches = scope.ServiceProvider.GetRequiredService<SearchService>();
+
+        await searches.DeleteSavedAsync(savedSearchId);
+        _saved = await searches.GetSavedAsync(State.ActiveUserId);
+    }
+}

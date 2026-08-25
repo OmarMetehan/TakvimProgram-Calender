@@ -15,7 +15,8 @@
             <span class="marka__ad">Takvim</span>
         </div>
 
-        <TopBar OnOpenPeople="() => _panel = Panel.People" />
+        <TopBar OnOpenPeople="() => _panel = Panel.People"
+                OnAdvancedSearch="() => _panel = Panel.Search" />
 
         <Sidebar OnCreate="() => OpenQuickCreate(null)"
                  OnOpenTrash="() => _panel = Panel.Trash"
@@ -85,6 +86,11 @@
                      OnAcceptProposal="AcceptProposal"
                      OnResetResponses="ResetResponses"
                      OnCancel="CloseAll" />
+    }
+
+    @if (_panel == Panel.Search)
+    {
+        <SearchPanel OnClose="CloseAll" OnOpen="OpenFromSearch" />
     }
 
     @if (_panel == Panel.Trash)
@@ -166,7 +172,7 @@
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
     [Inject] public required IJSRuntime Js { get; set; }
 
-    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav }
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search }
 
     private Panel _panel = Panel.None;
 
@@ -280,7 +286,12 @@
             case "b" or "B" or "t" or "T": await State.GoToTodayAsync(); break;
 
             case "/":
+                // Shift+/ zaten "?" üretir; burada yalnızca sade eğik çizgi gelir.
                 await Js.InvokeVoidAsync("takvim.focus", "#arama-alani");
+                break;
+
+            case "f" or "F":
+                _panel = Panel.Search;
                 break;
 
             case "?":
@@ -306,6 +317,21 @@
         _preview = activation;
         _previewPosition = await ComputePreviewPosition(activation);
         _previewAttendees = await LoadAttendeesAsync(activation.Occurrence.SeriesRootId);
+
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Arama sonucundan bir etkinliğe gider: görünüm o güne kayar ve
+    /// düzenleyici açılır. Kullanıcı sonucu bulduğunda yapmak istediği şey
+    /// çoğu zaman etkinliği görmektir, o günü görmek değil.
+    /// </summary>
+    private async Task OpenFromSearch(EventOccurrence occurrence)
+    {
+        await State.GoToAsync(occurrence.StartLocal.Date);
+
+        _draft = EventDraft.FromOccurrence(occurrence, State.ZoneId);
+        _panel = Panel.Editor;
 
         StateHasChanged();
     }

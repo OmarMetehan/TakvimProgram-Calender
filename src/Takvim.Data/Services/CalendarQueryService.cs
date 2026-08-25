@@ -33,6 +33,46 @@ public sealed record OccurrenceFilter
     /// etkinlikler de getirilir. Görünümlerde açık, dışa aktarmada kapalıdır.
     /// </summary>
     public bool IncludeInvitations { get; init; } = true;
+
+    // ------------------------------------------------------------------
+    // Gelişmiş arama ölçütleri
+    //
+    // Görünümler bunları kullanmaz; yalnızca arama paneli doldurur. Hepsi
+    // null/false iken sorgu eskisi gibi çalışır.
+    // ------------------------------------------------------------------
+
+    /// <summary>Yalnızca bu kişinin düzenlediği etkinlikler.</summary>
+    public Guid? OrganizerUserId { get; init; }
+
+    /// <summary>Yalnızca bu kişinin davetli olduğu etkinlikler.</summary>
+    public Guid? AttendeeUserId { get; init; }
+
+    /// <summary>True ise yalnızca davetlisi olan (toplantı olan) etkinlikler.</summary>
+    public bool? HasAttendees { get; init; }
+
+    /// <summary>True ise yalnızca tekrarlayan, false ise yalnızca tek seferlik.</summary>
+    public bool? IsRecurring { get; init; }
+
+    /// <summary>True ise yalnızca tüm gün, false ise yalnızca saatli etkinlikler.</summary>
+    public bool? IsAllDay { get; init; }
+
+    /// <summary>True ise yalnızca dosya eki olan etkinlikler.</summary>
+    public bool? HasAttachments { get; init; }
+
+    /// <summary>True ise yalnızca çevrimiçi toplantı bağlantısı olanlar.</summary>
+    public bool? HasOnlineMeeting { get; init; }
+
+    /// <summary>
+    /// Ölçütlerden biri etkinliğin içeriğine bakıyor mu. Böyle bir süzgeç
+    /// varken yalnızca detayı görülebilen örnekler döner: içeriği gizli bir
+    /// etkinliğin sonuçta belirmesi, o içerik hakkında bilgi verirdi.
+    /// </summary>
+    public bool RestrictsToDetails
+        => OrganizerUserId is not null
+           || AttendeeUserId is not null
+           || HasAttendees is not null
+           || HasAttachments is not null
+           || HasOnlineMeeting is not null;
 }
 
 /// <summary>
@@ -208,6 +248,33 @@ public sealed class CalendarQueryService(
         if (!filter.IncludeCancelled)
             query = query.Where(e => e.Status != EventStatus.Cancelled);
 
+        // Gelişmiş ölçütler. Veritabanında süzülürler: örnek genişletmesi
+        // pahalıdır, eleyebildiğimizi önce eleriz.
+        if (filter.OrganizerUserId is { } organizerId)
+            query = query.Where(e => e.OrganizerUserId == organizerId);
+
+        if (filter.AttendeeUserId is { } attendeeId)
+            query = query.Where(e => e.Attendees.Any(a => a.UserId == attendeeId));
+
+        if (filter.HasAttendees is { } hasAttendees)
+            query = hasAttendees ? query.Where(e => e.Attendees.Count > 0)
+                                 : query.Where(e => e.Attendees.Count == 0);
+
+        if (filter.IsRecurring is { } isRecurring)
+            query = isRecurring ? query.Where(e => e.RecurrenceRule != null)
+                                : query.Where(e => e.RecurrenceRule == null);
+
+        if (filter.IsAllDay is { } isAllDay)
+            query = query.Where(e => e.IsAllDay == isAllDay);
+
+        if (filter.HasAttachments is { } hasAttachments)
+            query = hasAttachments ? query.Where(e => e.Attachments.Count > 0)
+                                   : query.Where(e => e.Attachments.Count == 0);
+
+        if (filter.HasOnlineMeeting is { } hasMeeting)
+            query = hasMeeting ? query.Where(e => e.OnlineMeetingUrl != null)
+                               : query.Where(e => e.OnlineMeetingUrl == null);
+
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
         {
             var normalized = TurkishText.Normalize(filter.SearchTerm);
@@ -262,6 +329,15 @@ public sealed class CalendarQueryService(
         {
             var wanted = filter.Availabilities.ToHashSet();
             result = result.Where(o => wanted.Contains(o.Source.Availability));
+        }
+
+        // Gelişmiş ölçütler kök sorgusunda da uygulanır; burada ikinci kez
+        // sınanmalarının nedeni hız değil gizliliktir. Aksi hâlde "eki olanları
+        // göster" diyen biri, içeriğini göremediği bir etkinliğin ek taşıdığını
+        // meşgul bloğunun belirip kaybolmasından çıkarabilirdi.
+        if (filter.RestrictsToDetails)
+        {
+            result = result.Where(o => o.CanSeeDetails);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))

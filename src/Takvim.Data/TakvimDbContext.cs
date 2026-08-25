@@ -22,6 +22,7 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<Attachment> Attachments => Set<Attachment>();
     public DbSet<SavedLocation> SavedLocations => Set<SavedLocation>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
+    public DbSet<SavedSearch> SavedSearches => Set<SavedSearch>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -145,6 +146,18 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<SavedSearch>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.Name).HasMaxLength(120);
+
+            e.HasOne<User>().WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => new { x.UserId, x.Name }).IsUnique();
         });
 
         modelBuilder.Entity<EventTemplate>(e =>

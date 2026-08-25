@@ -40,14 +40,14 @@ if errorlevel 2 goto :engellendi
 exit /b %HATA%
 
 :engellendi
-if %DENEME% GEQ 6 (
+if %DENEME% GEQ 15 (
     echo.
-    echo Smart App Control alti denemede de engelledi. Ayrintilar Testler.cmd basinda.
+    echo Smart App Control 15 denemede de engelledi. Ayrintilar Testler.cmd basinda.
     exit /b 1
 )
 
 echo.
-echo [Smart App Control engeli] Yeniden derlenip denenecek... (%DENEME%/6)
+echo [Smart App Control engeli] Yeniden derlenip denenecek... (%DENEME%/15)
 dotnet build --nologo -v q --no-incremental >nul || exit /b 1
 goto :dene
 

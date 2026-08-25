@@ -31,6 +31,10 @@
                 @State.SearchMatchCount
             </span>
         }
+
+        <button type="button" class="dugme dugme--simge"
+                title="Gelişmiş arama (F)" aria-label="Gelişmiş arama"
+                @onclick="() => OnAdvancedSearch.InvokeAsync()">⌄</button>
     </div>
 
     <div class="gorunum-secici" role="group" aria-label="Görünüm seçimi">
@@ -119,6 +123,9 @@
 
     /// <summary>Hesap menüsünden kişiler paneline geçiş.</summary>
     [Parameter] public EventCallback OnOpenPeople { get; set; }
+
+    /// <summary>Gelişmiş arama panelini açar.</summary>
+    [Parameter] public EventCallback OnAdvancedSearch { get; set; }
 
     private bool _settingsOpen;
     private string _theme = "acik";

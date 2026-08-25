@@ -1611,3 +1611,52 @@ kbd {
 }
 
 .sablon-rozeti__sil:hover { background: var(--tehlike); color: #fff }
+
+/* Gelişmiş arama paneli */
+.panel--genis { width: min(620px, 100vw) }
+
+.uc-durum { font-variant-numeric: tabular-nums }
+
+.arama-gun {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--metin-2);
+    margin: 10px 0 4px;
+    position: sticky;
+    top: 0;
+    background: var(--zemin);
+    padding: 2px 0;
+}
+
+.arama-sonuc {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: var(--yuvarlak-s);
+    background: transparent;
+    color: var(--metin);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.arama-sonuc:hover { background: var(--yuzey-2); border-color: var(--cizgi) }
+
+.arama-sonuc__saat {
+    flex: none;
+    width: 62px;
+    color: var(--metin-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.arama-sonuc__baslik {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
