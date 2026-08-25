@@ -1,0 +1,566 @@
+@* Görevler: listeler, görev satırları, alt görevler ve takvime yer ayırma. *@
+
+<div class="perde" @onclick="() => OnClose.InvokeAsync()"></div>
+
+<div class="panel panel--genis" role="dialog" aria-modal="true" aria-label="Görevler">
+
+    <div class="panel__ust">
+        <h2 class="panel__baslik">Görevler</h2>
+        <button class="dugme dugme--simge" aria-label="Kapat" title="Kapat (Esc)"
+                @onclick="() => OnClose.InvokeAsync()">✕</button>
+    </div>
+
+    <div class="panel__govde">
+
+        @* ---------- Listeler ---------- *@
+
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+            <button type="button" class="rozet"
+                    style="border:1px solid @(_selectedListId is null ? "var(--birincil)" : "var(--cizgi)")"
+                    aria-pressed="@(_selectedListId is null ? "true" : "false")"
+                    @onclick="() => SelectList(null)">Tümü</button>
+
+            @foreach (var list in _lists)
+            {
+                <span class="sablon-rozeti renk-@list.Color">
+                    <button type="button" class="sablon-rozeti__ad"
+                            style="@(_selectedListId == list.Id ? "background:var(--yuzey-2);font-weight:600" : "")"
+                            @onclick="() => SelectList(list.Id)">
+                        <span class="renk-noktasi" style="width:8px;height:8px;border-radius:50%"></span>
+                        @list.Name
+                        <span style="color:var(--metin-3)"> @CountIn(list.Id)</span>
+                    </button>
+
+                    @if (!list.IsDefault)
+                    {
+                        <button type="button" class="sablon-rozeti__sil"
+                                title="Listeyi sil" aria-label="@($"{list.Name} listesini sil")"
+                                @onclick="() => DeleteList(list.Id)">✕</button>
+                    }
+                </span>
+            }
+
+            @if (_addingList)
+            {
+                <input class="alan" style="width:160px" placeholder="Liste adı" aria-label="Liste adı"
+                       @bind="_newListName" @bind:event="oninput" @onkeydown="OnListNameKey" />
+            }
+            else
+            {
+                <button type="button" class="dugme dugme--sade" @onclick="() => _addingList = true">
+                    + Liste
+                </button>
+            }
+        </div>
+
+        @if (_error is { } error)
+        {
+            <div role="alert" style="color:var(--tehlike);font-size:12px">@error</div>
+        }
+
+        @* ---------- Hızlı ekleme ---------- *@
+
+        <div style="display:flex;gap:6px">
+            <input class="alan" style="flex:1" placeholder="Yeni görev — Enter ile ekle"
+                   aria-label="Yeni görev" @bind="_newTitle" @bind:event="oninput"
+                   @onkeydown="OnNewTitleKey" />
+
+            <input class="alan" type="date" style="width:150px" aria-label="Bitiş günü"
+                   value="@_newDue" @onchange="e => _newDue = e.Value?.ToString() ?? string.Empty" />
+
+            <button class="dugme dugme--birincil" disabled="@string.IsNullOrWhiteSpace(_newTitle)"
+                    @onclick="AddTask">Ekle</button>
+        </div>
+
+        <label class="liste-ogesi" style="padding-left:0">
+            <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                   checked="@_showDone" @onchange="OnShowDoneToggled" />
+            <span class="liste-ogesi__ad">Tamamlananları göster</span>
+        </label>
+
+        @* ---------- Görevler ---------- *@
+
+        @if (_tasks.Count == 0)
+        {
+            <div class="bos-durum">
+                <div class="bos-durum__baslik">Görev yok</div>
+                <div>Yukarıdaki kutuya yazıp Enter'a basın.</div>
+            </div>
+        }
+        else
+        {
+            @foreach (var task in _tasks)
+            {
+                <div class="gorev @(task.IsDone ? "gorev--bitti" : "") @(task.IsOverdue(State.Now) ? "gorev--gecikmis" : "")">
+
+                    <div class="gorev__satir">
+                        <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                               checked="@task.IsDone"
+                               aria-label="@($"{task.Title} tamamlandı")"
+                               @onchange="e => SetDone(task.Id, (bool)(e.Value ?? false))" />
+
+                        <span class="gorev__oncelik @PriorityClass(task.Priority)"
+                              title="@PriorityLabel(task.Priority)">@PriorityMark(task.Priority)</span>
+
+                        <button type="button" class="gorev__baslik" @onclick="() => Edit(task)">
+                            @task.Title
+
+                            @if (task.RecurrenceRule is not null)
+                            {
+                                <span title="Tekrarlayan görev" aria-hidden="true"> ⟳</span>
+                            }
+
+                            @if (task.ScheduledEventId is not null)
+                            {
+                                <span title="Takvimde yeri ayrılmış" aria-hidden="true"> 📌</span>
+                            }
+                        </button>
+
+                        @if (task.Due is { } due)
+                        {
+                            <span class="gorev__tarih" title="@TurkishFormat.LongDate(due.Date)">
+                                @DueLabel(task)
+                            </span>
+                        }
+
+                        <button class="dugme dugme--simge" title="Takvimde yer ayır"
+                                aria-label="@($"{task.Title} için takvimde yer ayır")"
+                                @onclick="() => Schedule(task)">🗓</button>
+
+                        <button class="dugme dugme--simge dugme--tehlike" title="Sil"
+                                aria-label="@($"{task.Title} görevini sil")"
+                                @onclick="() => Delete(task.Id)">✕</button>
+                    </div>
+
+                    @if (task.Subtasks.Count > 0)
+                    {
+                        <div class="gorev__altlar">
+                            @foreach (var subtask in task.Subtasks.OrderBy(s => s.SortOrder))
+                            {
+                                <div class="gorev__satir">
+                                    <input type="checkbox" class="onay-kutusu" style="--olay-renk:var(--birincil)"
+                                           checked="@subtask.IsDone"
+                                           aria-label="@($"{subtask.Title} tamamlandı")"
+                                           @onchange="e => SetDone(subtask.Id, (bool)(e.Value ?? false))" />
+
+                                    <span class="gorev__baslik @(subtask.IsDone ? "gorev__baslik--bitti" : "")">
+                                        @subtask.Title
+                                    </span>
+
+                                    <button class="dugme dugme--simge dugme--tehlike" title="Sil"
+                                            aria-label="@($"{subtask.Title} alt görevini sil")"
+                                            @onclick="() => Delete(subtask.Id)">✕</button>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (_editingId == task.Id)
+                    {
+                        <div class="gorev__duzenle">
+                            <input class="alan" placeholder="Başlık" aria-label="Görev başlığı"
+                                   @bind="_editTitle" @bind:event="oninput" />
+
+                            <textarea class="alan" rows="2" placeholder="Not"
+                                      aria-label="Görev notu"
+                                      @bind="_editNotes" @bind:event="oninput"></textarea>
+
+                            <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px">
+                                <input class="alan" type="date" aria-label="Bitiş günü"
+                                       value="@_editDue"
+                                       @onchange="e => _editDue = e.Value?.ToString() ?? string.Empty" />
+
+                                <input class="alan" type="time" style="width:110px" aria-label="Bitiş saati"
+                                       value="@_editTime"
+                                       @onchange="e => _editTime = e.Value?.ToString() ?? string.Empty" />
+
+                                <select class="alan" style="width:120px" aria-label="Öncelik"
+                                        @bind="_editPriority">
+                                    <option value="@TaskPriority.High">Yüksek</option>
+                                    <option value="@TaskPriority.Normal">Normal</option>
+                                    <option value="@TaskPriority.Low">Düşük</option>
+                                </select>
+                            </div>
+
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                                <select class="alan" aria-label="Liste" @bind="_editListId">
+                                    @foreach (var list in _lists)
+                                    {
+                                        <option value="@list.Id">@list.Name</option>
+                                    }
+                                </select>
+
+                                <select class="alan" aria-label="Tekrar" @bind="_editRecurrence"
+                                        disabled="@string.IsNullOrEmpty(_editDue)">
+                                    <option value="">Tekrarlamaz</option>
+                                    <option value="FREQ=DAILY">Her gün</option>
+                                    <option value="FREQ=WEEKLY">Her hafta</option>
+                                    <option value="FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR">Hafta içi her gün</option>
+                                    <option value="FREQ=MONTHLY">Her ay</option>
+                                    <option value="FREQ=YEARLY">Her yıl</option>
+                                </select>
+                            </div>
+
+                            <div style="display:flex;gap:6px;align-items:center">
+                                <input class="alan" style="flex:1" placeholder="Alt görev ekle"
+                                       aria-label="Alt görev" @bind="_newSubtask" @bind:event="oninput"
+                                       @onkeydown="e => OnSubtaskKey(e, task.Id)" />
+
+                                <button class="dugme" disabled="@string.IsNullOrWhiteSpace(_newSubtask)"
+                                        @onclick="() => AddSubtask(task.Id)">+ Alt görev</button>
+                            </div>
+
+                            <div style="display:flex;gap:6px">
+                                @if (task.ScheduledEventId is not null)
+                                {
+                                    <button class="dugme dugme--sade" @onclick="() => Unschedule(task.Id)">
+                                        Takvimden kaldır
+                                    </button>
+                                }
+
+                                <span class="panel__bosluk"></span>
+                                <button class="dugme" @onclick="() => _editingId = null">Vazgeç</button>
+                                <button class="dugme dugme--birincil" @onclick="SaveEdit">Kaydet</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+
+    <div class="panel__alt">
+        <span class="panel__bosluk"></span>
+        <button class="dugme" @onclick="() => OnClose.InvokeAsync()">Kapat</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] public required CalendarUiState State { get; set; }
+
+    [Inject] public required IServiceScopeFactory Scopes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Takvime yer ayrıldığında ızgara tazelensin diye.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<TaskList> _lists = [];
+    private List<TaskItem> _tasks = [];
+    private Guid? _selectedListId;
+
+    private bool _showDone;
+    private string? _error;
+
+    private bool _addingList;
+    private string _newListName = string.Empty;
+
+    private string _newTitle = string.Empty;
+    private string _newDue = string.Empty;
+
+    private Guid? _editingId;
+    private string _editTitle = string.Empty;
+    private string _editNotes = string.Empty;
+    private string _editDue = string.Empty;
+    private string _editTime = string.Empty;
+    private TaskPriority _editPriority = TaskPriority.Normal;
+    private Guid _editListId;
+    private string _editRecurrence = string.Empty;
+    private string _newSubtask = string.Empty;
+
+    // ------------------------------------------------------------------
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var tasks = scope.ServiceProvider.GetRequiredService<TaskService>();
+
+        // Varsayılan liste ilk açılışta kurulur; kullanıcı liste açmak zorunda kalmaz.
+        await tasks.GetOrCreateDefaultListAsync(State.ActiveUserId);
+
+        _lists = await tasks.GetListsAsync(State.ActiveUserId);
+        _tasks = await tasks.GetAsync(State.ActiveUserId, new TaskFilter
+        {
+            TaskListIds = _selectedListId is { } id ? [id] : [],
+            IncludeDone = _showDone,
+        });
+    }
+
+    private int CountIn(Guid listId) => _tasks.Count(t => t.TaskListId == listId && !t.IsDone);
+
+    private async Task SelectList(Guid? listId)
+    {
+        _selectedListId = listId;
+        await LoadAsync();
+    }
+
+    private async Task OnShowDoneToggled(ChangeEventArgs e)
+    {
+        _showDone = (bool)(e.Value ?? false);
+        await LoadAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Listeler
+    // ------------------------------------------------------------------
+
+    private async Task OnListNameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") { _addingList = false; return; }
+        if (e.Key != "Enter" || string.IsNullOrWhiteSpace(_newListName)) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<TaskService>()
+                .CreateListAsync(State.ActiveUserId, _newListName);
+        }
+
+        _newListName = string.Empty;
+        _addingList = false;
+
+        await LoadAsync();
+    }
+
+    private async Task DeleteList(Guid listId)
+    {
+        _error = null;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            _error = await scope.ServiceProvider.GetRequiredService<TaskService>()
+                .DeleteListAsync(listId);
+        }
+
+        if (_selectedListId == listId) _selectedListId = null;
+
+        await LoadAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Görevler
+    // ------------------------------------------------------------------
+
+    private async Task OnNewTitleKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddTask();
+    }
+
+    private async Task AddTask()
+    {
+        if (string.IsNullOrWhiteSpace(_newTitle)) return;
+
+        var listId = _selectedListId ?? _lists.FirstOrDefault(l => l.IsDefault)?.Id ?? _lists[0].Id;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<TaskService>().CreateAsync(new TaskInput
+            {
+                TaskListId = listId,
+                Title = _newTitle,
+                DueDate = ParseDate(_newDue),
+            });
+        }
+
+        _newTitle = string.Empty;
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SetDone(Guid taskId, bool done)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<TaskService>()
+                .SetDoneAsync(taskId, done, State.ActiveUserId);
+        }
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task Delete(Guid taskId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<TaskService>().DeleteAsync(taskId);
+        }
+
+        if (_editingId == taskId) _editingId = null;
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Düzenleme
+    // ------------------------------------------------------------------
+
+    private void Edit(TaskItem task)
+    {
+        if (_editingId == task.Id) { _editingId = null; return; }
+
+        _editingId = task.Id;
+        _editTitle = task.Title;
+        _editNotes = task.Notes ?? string.Empty;
+        _editDue = task.DueDate?.ToString("uuuu-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
+        _editTime = task.DueTime?.ToString("HH:mm", CultureInfo.InvariantCulture) ?? string.Empty;
+        _editPriority = task.Priority;
+        _editListId = task.TaskListId;
+        _editRecurrence = task.RecurrenceRule ?? string.Empty;
+        _newSubtask = string.Empty;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (_editingId is not { } taskId || string.IsNullOrWhiteSpace(_editTitle)) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<TaskService>().UpdateAsync(taskId, new TaskInput
+            {
+                TaskListId = _editListId,
+                Title = _editTitle,
+                Notes = string.IsNullOrWhiteSpace(_editNotes) ? null : _editNotes,
+                DueDate = ParseDate(_editDue),
+                DueTime = ParseTime(_editTime),
+                Priority = _editPriority,
+                RecurrenceRule = string.IsNullOrWhiteSpace(_editRecurrence) ? null : _editRecurrence,
+            });
+        }
+
+        _editingId = null;
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task OnSubtaskKey(KeyboardEventArgs e, Guid parentId)
+    {
+        if (e.Key == "Enter") await AddSubtask(parentId);
+    }
+
+    private async Task AddSubtask(Guid parentId)
+    {
+        if (string.IsNullOrWhiteSpace(_newSubtask)) return;
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<TaskService>().CreateAsync(new TaskInput
+            {
+                TaskListId = _editListId,
+                Title = _newSubtask,
+                ParentTaskId = parentId,
+            });
+        }
+
+        _newSubtask = string.Empty;
+
+        await LoadAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Takvime yer ayırma
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Göreve bir saat yer ayırır. Yer, görevin bitiş gününde çalışma gününün
+    /// başında aranır; gün yoksa bugüne konur.
+    /// </summary>
+    private async Task Schedule(TaskItem task)
+    {
+        var calendar = State.DefaultCalendar;
+
+        if (calendar is null)
+        {
+            _error = "Yazılabilir bir takvim yok.";
+            return;
+        }
+
+        var date = task.DueDate ?? State.Today;
+        var start = date.At(task.DueTime ?? new LocalTime(9, 0));
+
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var provider = scope.ServiceProvider;
+
+            await provider.GetRequiredService<TaskService>().ScheduleAsync(
+                task.Id, calendar.Id, start, 60, State.ZoneId, State.ActiveUserId,
+                provider.GetRequiredService<EventService>());
+        }
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+
+        State.ShowStatus($"\"{task.Title}\" için {TurkishFormat.DateTime(start)} ayrıldı.");
+    }
+
+    private async Task Unschedule(Guid taskId)
+    {
+        await using (var scope = Scopes.CreateAsyncScope())
+        {
+            var provider = scope.ServiceProvider;
+
+            await provider.GetRequiredService<TaskService>().UnscheduleAsync(
+                taskId, State.ActiveUserId, provider.GetRequiredService<EventService>());
+        }
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Biçimlendirme
+    // ------------------------------------------------------------------
+
+    private static LocalDate? ParseDate(string value)
+        => DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                                  DateTimeStyles.None, out var parsed)
+            ? LocalDate.FromDateTime(parsed)
+            : null;
+
+    private static LocalTime? ParseTime(string value)
+        => TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var parsed)
+            ? LocalTime.FromTicksSinceMidnight(parsed.Ticks)
+            : null;
+
+    /// <summary>Yakın tarihler "Bugün"/"Yarın" diye okunur; uzaklar gün ve ay olarak.</summary>
+    private string DueLabel(TaskItem task)
+    {
+        if (task.DueDate is not { } date) return string.Empty;
+
+        var time = task.DueTime is { } t ? " " + TurkishFormat.Time(t) : string.Empty;
+        var days = Period.Between(State.Today, date, PeriodUnits.Days).Days;
+
+        return days switch
+        {
+            0 => "Bugün" + time,
+            1 => "Yarın" + time,
+            -1 => "Dün" + time,
+            _ => TurkishFormat.DayAndMonth(date) + time,
+        };
+    }
+
+    private static string PriorityMark(TaskPriority priority) => priority switch
+    {
+        TaskPriority.High => "!",
+        TaskPriority.Low => "↓",
+        _ => "",
+    };
+
+    private static string PriorityClass(TaskPriority priority) => priority switch
+    {
+        TaskPriority.High => "gorev__oncelik--yuksek",
+        TaskPriority.Low => "gorev__oncelik--dusuk",
+        _ => "",
+    };
+
+    private static string PriorityLabel(TaskPriority priority) => priority switch
+    {
+        TaskPriority.High => "Yüksek öncelik",
+        TaskPriority.Low => "Düşük öncelik",
+        _ => "Normal öncelik",
+    };
+}

@@ -1688,3 +1688,96 @@ kbd {
     border-color: var(--birincil);
     background: color-mix(in srgb, var(--birincil) 18%, transparent);
 }
+
+/* Görevler */
+.gorev {
+    border: 1px solid var(--cizgi);
+    border-radius: var(--yuvarlak);
+    padding: 7px 9px;
+    margin-bottom: 6px;
+}
+
+.gorev--gecikmis { border-color: var(--tehlike) }
+.gorev--bitti { opacity: .6 }
+
+.gorev__satir {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gorev__baslik {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    color: var(--metin);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 2px 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gorev--bitti .gorev__baslik,
+.gorev__baslik--bitti { text-decoration: line-through; cursor: default }
+
+.gorev__oncelik {
+    flex: none;
+    width: 12px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: transparent;
+}
+
+.gorev__oncelik--yuksek { color: var(--tehlike) }
+.gorev__oncelik--dusuk { color: var(--metin-3); font-weight: 400 }
+
+.gorev__tarih {
+    flex: none;
+    font-size: 12px;
+    color: var(--metin-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.gorev--gecikmis .gorev__tarih { color: var(--tehlike); font-weight: 500 }
+
+.gorev__altlar {
+    margin: 5px 0 0 22px;
+    padding-left: 9px;
+    border-left: 2px solid var(--cizgi);
+}
+
+.gorev__duzenle {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--cizgi);
+}
+
+/* Izgaradaki gün başlığında görev sayacı */
+.gorev-rozeti {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 999px;
+    background: var(--yuzey-2);
+    color: var(--metin-2);
+    cursor: pointer;
+    border: 1px solid var(--cizgi);
+}
+
+.gorev-rozeti--gecikmis {
+    background: color-mix(in srgb, var(--tehlike) 15%, transparent);
+    border-color: var(--tehlike);
+    color: var(--tehlike);
+}

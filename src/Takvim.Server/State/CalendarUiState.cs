@@ -32,6 +32,7 @@ public sealed class CalendarUiState(
     private readonly List<Category> _categories = [];
     private List<EventOccurrence> _occurrences = [];
     private Dictionary<LocalDate, DaySchedule> _schedules = [];
+    private List<TaskItem> _tasks = [];
 
     /// <summary>Görünüm ya da veri değiştiğinde tetiklenir.</summary>
     public event Action? Changed;
@@ -48,6 +49,12 @@ public sealed class CalendarUiState(
 
     /// <summary>Görünen günlerin mesai düzeni; ızgaranın soluk alanları buradan çizilir.</summary>
     public IReadOnlyDictionary<LocalDate, DaySchedule> Schedules => _schedules;
+
+    /// <summary>Görünen aralıkta bitiş tarihi olan görevler.</summary>
+    public IReadOnlyList<TaskItem> Tasks => _tasks;
+
+    /// <summary>Bir günün görevleri; ızgaradaki gün başlıkları bunu okur.</summary>
+    public IEnumerable<TaskItem> TasksOn(LocalDate date) => _tasks.Where(t => t.DueDate == date);
 
     public bool IsLoading { get; private set; }
     public UndoPrompt? PendingUndo { get; private set; }
@@ -166,6 +173,10 @@ public sealed class CalendarUiState(
             var schedule = scope.ServiceProvider.GetRequiredService<WorkScheduleService>();
             _schedules = await schedule
                 .GetRangeAsync(ActiveUserId, View.RangeStart, View.RangeEnd, ct)
+                .ConfigureAwait(false);
+
+            _tasks = await scope.ServiceProvider.GetRequiredService<TaskService>()
+                .GetForDateRangeAsync(ActiveUserId, View.RangeStart, View.RangeEnd, ct)
                 .ConfigureAwait(false);
         }
         finally

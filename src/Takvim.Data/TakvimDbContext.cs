@@ -23,6 +23,8 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
     public DbSet<SavedLocation> SavedLocations => Set<SavedLocation>();
     public DbSet<EventTemplate> EventTemplates => Set<EventTemplate>();
     public DbSet<SavedSearch> SavedSearches => Set<SavedSearch>();
+    public DbSet<TaskList> TaskLists => Set<TaskList>();
+    public DbSet<TaskItem> Tasks => Set<TaskItem>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -146,6 +148,47 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.HasIndex(x => new { x.EntityType, x.EntityId });
             // Geri alma, bir işlemin tüm satırlarını bu indeksle toplar.
             e.HasIndex(x => x.OperationId);
+        });
+
+        modelBuilder.Entity<TaskList>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.Name).HasMaxLength(120);
+            e.Property(x => x.Color).HasMaxLength(32);
+
+            e.HasOne<User>().WithMany()
+                .HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.OwnerUserId);
+        });
+
+        modelBuilder.Entity<TaskItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.Title).HasMaxLength(500);
+            e.Property(x => x.Notes).HasMaxLength(8000);
+            e.Property(x => x.RecurrenceRule).HasMaxLength(500);
+            e.Property(x => x.SearchText).HasMaxLength(4000);
+
+            e.Ignore(x => x.IsDone);
+            e.Ignore(x => x.Due);
+
+            e.HasOne(x => x.List).WithMany(l => l.Tasks)
+                .HasForeignKey(x => x.TaskListId).OnDelete(DeleteBehavior.Cascade);
+
+            // Alt görevler üst görevle birlikte gider.
+            e.HasOne(x => x.Parent).WithMany(t => t.Subtasks)
+                .HasForeignKey(x => x.ParentTaskId).OnDelete(DeleteBehavior.Cascade);
+
+            // Takvime ayrılan blok silinirse görev kalır, yalnızca bağ kopar.
+            e.HasOne<Event>().WithMany()
+                .HasForeignKey(x => x.ScheduledEventId).OnDelete(DeleteBehavior.SetNull);
+
+            // Liste görünümünün ve gün şeridinin dayandığı iki indeks.
+            e.HasIndex(x => new { x.TaskListId, x.DeletedAt });
+            e.HasIndex(x => x.DueDate);
         });
 
         modelBuilder.Entity<SavedSearch>(e =>

@@ -23,6 +23,25 @@
                         title="@TurkishFormat.LongDateWithDay(day) — gün görünümüne geç"
                         @onclick="() => OpenDay(day)">@day.Day</button>
 
+                @* Görevler ızgarada yer kaplamaz — süreleri yoktur — yalnızca
+                   o güne kaç iş düştüğünü söyleyen bir sayaçla görünürler. *@
+                @{
+                    var dayTasks = State.TasksOn(day).Where(t => !t.IsDone).ToList();
+                }
+
+                @if (dayTasks.Count > 0)
+                {
+                    var overdue = day < State.Today;
+
+                    <button type="button"
+                            class="gorev-rozeti @(overdue ? "gorev-rozeti--gecikmis" : "")"
+                            title="@string.Join(", ", dayTasks.Take(5).Select(t => t.Title))"
+                            aria-label="@($"{dayTasks.Count} görev — görev listesini aç")"
+                            @onclick="() => OnOpenTasks.InvokeAsync()">
+                        ✓ @dayTasks.Count
+                    </button>
+                }
+
                 @if (holidays.Count > 0)
                 {
                     <div class="gun-basligi__tatil" title="@string.Join(", ", holidays.Select(h => h.Name))">
@@ -182,6 +201,9 @@
 
     /// <summary>Gün başlığındaki çalışma konumu rozetine tıklandığında.</summary>
     [Parameter] public EventCallback<LocalDate> OnEditLocation { get; set; }
+
+    /// <summary>Gün başlığındaki görev sayacına tıklandığında.</summary>
+    [Parameter] public EventCallback OnOpenTasks { get; set; }
 
     /// <summary>Izgaradaki tek bir sütun: bir gün ve (yan yana kipte) bir takvim.</summary>
     private readonly record struct GridColumn(LocalDate Day, Guid? CalendarId);

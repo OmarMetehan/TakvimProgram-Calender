@@ -23,7 +23,8 @@
                  OnOpenImportExport="() => _panel = Panel.ImportExport"
                  OnOpenShortcuts="() => _panel = Panel.Shortcuts"
                  OnOpenWorkSchedule="() => OpenWorkSchedule(State.Today)"
-                 OnOpenCalDav="() => _panel = Panel.CalDav" />
+                 OnOpenCalDav="() => _panel = Panel.CalDav"
+                 OnOpenTasks="() => _panel = Panel.Tasks" />
 
         <main class="icerik">
             @if (State.IsLoading)
@@ -50,7 +51,8 @@
                               OnCreateSlot="OnCreateSlot"
                               OnMove="OnMove"
                               OnResize="OnResize"
-                              OnEditLocation="OpenWorkSchedule" />
+                              OnEditLocation="OpenWorkSchedule"
+                              OnOpenTasks="() => _panel = Panel.Tasks" />
                     break;
             }
         </main>
@@ -86,6 +88,12 @@
                      OnAcceptProposal="AcceptProposal"
                      OnResetResponses="ResetResponses"
                      OnCancel="CloseAll" />
+    }
+
+    @if (_panel == Panel.Tasks)
+    {
+        @* Göreve takvimde yer ayrılabildiği için etkinlikler de tazelenir. *@
+        <TaskPanel OnClose="CloseAll" OnChanged="() => State.ReloadAsync()" />
     }
 
     @if (_panel == Panel.Search)
@@ -172,7 +180,7 @@
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
     [Inject] public required IJSRuntime Js { get; set; }
 
-    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search }
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search, Tasks }
 
     private Panel _panel = Panel.None;
 
@@ -292,6 +300,10 @@
 
             case "f" or "F":
                 _panel = Panel.Search;
+                break;
+
+            case "v" or "V":
+                _panel = Panel.Tasks;
                 break;
 
             case "?":
