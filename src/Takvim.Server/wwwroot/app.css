@@ -1900,3 +1900,20 @@ kbd {
     border-left: 2px solid var(--cizgi);
     font-style: italic;
 }
+
+/* İkinci zaman dilimi sütunu */
+:root { --saat-sutunu-ikincil: 52px }
+
+.saat-sutunu--ikincil { border-right: 1px solid var(--cizgi) }
+
+.saat-sutunu--ikincil .saat-etiketi span {
+    color: var(--metin-3);
+    opacity: .75;
+}
+
+.izgara__kose {
+    gap: 4px;
+    justify-content: space-around;
+}
+
+.izgara__kose-dilim { white-space: nowrap }

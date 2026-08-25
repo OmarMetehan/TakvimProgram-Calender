@@ -103,6 +103,25 @@
         </label>
 
         <div>
+            <label class="etiket" for="ikinci-dilim">İkinci saat dilimi</label>
+
+            <select id="ikinci-dilim" class="alan"
+                    value="@(State.View.SecondaryZoneId ?? string.Empty)"
+                    @onchange="SetSecondaryZone">
+                <option value="">Gösterme</option>
+                @foreach (var zone in SecondaryZones)
+                {
+                    <option value="@zone">@zone</option>
+                }
+            </select>
+
+            <div style="font-size:11px;color:var(--metin-3);margin-top:4px">
+                Izgarada saat sütununun soluna ikinci bir sütun eklenir.
+                Karşılıklar görünen ilk güne göre hesaplanır.
+            </div>
+        </div>
+
+        <div>
             <span class="etiket">Tema</span>
             <div class="gorunum-secici">
                 <button type="button" aria-current="@Pressed(_theme == "acik")"
@@ -153,6 +172,24 @@
     private static string Pressed(bool value) => value ? "true" : "false";
 
     private Task SetKind(CalendarViewKind kind) => State.SetViewAsync(State.View.WithKind(kind));
+
+    /// <summary>Kısa liste; tam liste yüzlerce satırdır.</summary>
+    private static readonly string[] SecondaryZones =
+    [
+        "Europe/Istanbul", "Europe/London", "Europe/Berlin", "Europe/Paris", "Europe/Moscow",
+        "America/New_York", "America/Chicago", "America/Los_Angeles", "America/Sao_Paulo",
+        "Asia/Dubai", "Asia/Tokyo", "Asia/Shanghai", "Asia/Kolkata", "Australia/Sydney", "UTC",
+    ];
+
+    private async Task SetSecondaryZone(ChangeEventArgs e)
+    {
+        var zone = e.Value?.ToString();
+
+        await State.SetViewAsync(State.View with
+        {
+            SecondaryZoneId = string.IsNullOrWhiteSpace(zone) ? null : zone,
+        });
+    }
 
     private async Task SetDensity(GridDensity density)
     {

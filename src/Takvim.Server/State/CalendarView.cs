@@ -51,6 +51,13 @@ public sealed record CalendarViewState
     public CalendarDisplayMode DisplayMode { get; init; } = CalendarDisplayMode.Overlay;
     public bool HideWeekends { get; init; }
 
+    /// <summary>
+    /// Izgarada saat sütununun yanında gösterilecek ikinci zaman dilimi.
+    /// Null ise tek sütun çizilir. Yurt dışıyla çalışırken saat çevirmeden
+    /// görmek içindir.
+    /// </summary>
+    public string? SecondaryZoneId { get; init; }
+
     public string? SearchTerm { get; init; }
     public IReadOnlyList<Guid> HiddenCalendarIds { get; init; } = [];
     public IReadOnlyList<Guid> CategoryFilter { get; init; } = [];
@@ -161,6 +168,7 @@ public sealed record CalendarViewState
         if (Density == GridDensity.Compact) parts.Add("yog=kompakt");
         if (DisplayMode == CalendarDisplayMode.Columns) parts.Add("mod=sutun");
         if (HideWeekends) parts.Add("hs=1");
+        if (!string.IsNullOrWhiteSpace(SecondaryZoneId)) parts.Add("dilim2=" + Uri.EscapeDataString(SecondaryZoneId));
         if (!string.IsNullOrWhiteSpace(SearchTerm)) parts.Add("q=" + Uri.EscapeDataString(SearchTerm));
         if (HiddenCalendarIds.Count > 0) parts.Add("gizli=" + string.Join(",", HiddenCalendarIds.Select(i => i.ToString("N"))));
         if (CategoryFilter.Count > 0) parts.Add("kat=" + string.Join(",", CategoryFilter.Select(i => i.ToString("N"))));
@@ -187,6 +195,7 @@ public sealed record CalendarViewState
             DisplayMode = query.TryGetValue("mod", out var m) && m == "sutun"
                 ? CalendarDisplayMode.Columns : CalendarDisplayMode.Overlay,
             HideWeekends = query.TryGetValue("hs", out var hs) && hs == "1",
+            SecondaryZoneId = query.TryGetValue("dilim2", out var z) && !string.IsNullOrWhiteSpace(z) ? z : null,
             SearchTerm = query.TryGetValue("q", out var q) && !string.IsNullOrWhiteSpace(q) ? q : null,
             HiddenCalendarIds = ParseIds(query, "gizli"),
             CategoryFilter = ParseIds(query, "kat"),

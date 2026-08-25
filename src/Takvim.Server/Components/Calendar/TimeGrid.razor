@@ -7,7 +7,13 @@
 
     @* Gün başlıkları *@
     <div class="izgara__ust" style="grid-template-columns:@ColumnTemplate">
-        <div class="izgara__kose">@ZoneAbbreviation</div>
+        <div class="izgara__kose">
+            @if (SecondaryZone is not null)
+            {
+                <span class="izgara__kose-dilim">@Abbreviate(SecondaryZone)</span>
+            }
+            <span class="izgara__kose-dilim">@ZoneAbbreviation</span>
+        </div>
 
         @foreach (var day in Days)
         {
@@ -104,6 +110,16 @@
     @* Kaydırılan saat ızgarası *@
     <div class="izgara__govde" id="izgara-govde">
         <div class="izgara__ic" style="grid-template-columns:@ColumnTemplate">
+
+            @if (SecondaryZone is not null)
+            {
+                <div class="saat-sutunu saat-sutunu--ikincil">
+                    @for (var hour = 0; hour < 24; hour++)
+                    {
+                        <div class="saat-etiketi"><span>@SecondaryLabel(hour)</span></div>
+                    }
+                </div>
+            }
 
             <div class="saat-sutunu">
                 @for (var hour = 0; hour < 24; hour++)
@@ -246,17 +262,57 @@
     }
 
     private string ColumnTemplate
-        => $"var(--saat-sutunu) repeat({Days.Count * CalendarsPerDay}, minmax(0, 1fr))";
-
-    /// <summary>Kullanıcının zaman diliminin kısaltması; ızgaranın sol üst köşesinde gösterilir.</summary>
-    private string ZoneAbbreviation
     {
         get
         {
-            var city = State.ZoneId.Split('/').Last();
-            return city.Length <= 3 ? city : city[..3];
+            var gutter = SecondaryZone is null
+                ? "var(--saat-sutunu)"
+                : "var(--saat-sutunu-ikincil) var(--saat-sutunu)";
+
+            return $"{gutter} repeat({Days.Count * CalendarsPerDay}, minmax(0, 1fr))";
         }
     }
+
+    /// <summary>Gösterilecek ikinci zaman dilimi; ayarlanmamışsa null.</summary>
+    private string? SecondaryZone
+    {
+        get
+        {
+            var zone = State.View.SecondaryZoneId;
+
+            // Kullanıcının kendi dilimini ikinci kez göstermenin anlamı yok.
+            return string.IsNullOrWhiteSpace(zone) || zone == State.ZoneId ? null : zone;
+        }
+    }
+
+    /// <summary>
+    /// Birincil dilimdeki bir saatin, ikincil dilimdeki karşılığı.
+    /// <para>
+    /// Karşılık <b>görünen ilk güne</b> göre hesaplanır: yaz saati geçişleri
+    /// iki dilimde farklı günlerde olduğu için fark hafta içinde değişebilir.
+    /// Tek bir sütun çizildiğinden bir gün seçilmek zorunda; ilk gün, ızgaraya
+    /// bakarken göz önündeki gündür.
+    /// </para>
+    /// </summary>
+    private string SecondaryLabel(int hour)
+    {
+        if (SecondaryZone is not { } zone) return string.Empty;
+
+        var reference = Days.Count > 0 ? Days[0] : State.Today;
+        var instant = State.ToInstant(reference.At(new LocalTime(hour, 0)), State.ZoneId);
+        var local = State.ToLocal(instant, zone);
+
+        return TurkishFormat.SecondaryHour(local, reference);
+    }
+
+    private static string Abbreviate(string zoneId)
+    {
+        var city = zoneId.Split('/').Last();
+        return city.Length <= 3 ? city : city[..3];
+    }
+
+    /// <summary>Kullanıcının zaman diliminin kısaltması; ızgaranın sol üst köşesinde gösterilir.</summary>
+    private string ZoneAbbreviation => Abbreviate(State.ZoneId);
 
     private double NowRatio
     {

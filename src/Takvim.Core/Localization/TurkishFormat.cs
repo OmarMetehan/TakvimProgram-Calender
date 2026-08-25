@@ -33,6 +33,29 @@ public static class TurkishFormat
     /// <summary>14:30</summary>
     public static string Time(LocalTime time) => $"{time.Hour:00}:{time.Minute:00}";
 
+    /// <summary>
+    /// İkinci zaman dilimi sütununun etiketi.
+    /// <para>
+    /// Saatin yanına gün kayması işareti konur: 23:00 İstanbul, Tokyo'da
+    /// ertesi gündür ve bunu göstermeyen bir sütun yanıltıcı olur. Dakika da
+    /// yazılır, çünkü her dilim tam saat farkında değildir — Kolkata yarım
+    /// saat kaymıştır.
+    /// </para>
+    /// </summary>
+    /// <param name="secondaryLocal">Karşılık gelen yerel saat.</param>
+    /// <param name="referenceDate">Birincil dilimdeki gün.</param>
+    public static string SecondaryHour(LocalDateTime secondaryLocal, LocalDate referenceDate)
+    {
+        var shift = secondaryLocal.Date.CompareTo(referenceDate) switch
+        {
+            < 0 => "⁻",
+            > 0 => "⁺",
+            _ => string.Empty,
+        };
+
+        return Time(secondaryLocal.TimeOfDay) + shift;
+    }
+
     public static string Time(LocalDateTime value) => Time(value.TimeOfDay);
 
     /// <summary>02.03.2026 14:30</summary>
