@@ -24,4 +24,17 @@
     <RootNamespace>Takvim.Desktop</RootNamespace>
   </PropertyGroup>
 
+  <!--
+    Web SDK'nın statik varlık işleyişi, ona başvuran düz bir masaüstü projesine
+    akmıyor: wwwroot çıktıya hiç kopyalanmıyordu ve uygulama biçimsiz açılıyordu.
+    Dosyalar burada açıkça taşınır.
+  -->
+  <ItemGroup>
+    <SunucuVarliklari Include="..\Takvim.Server\wwwroot\**\*" />
+
+    <Content Include="@(SunucuVarliklari)"
+             Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

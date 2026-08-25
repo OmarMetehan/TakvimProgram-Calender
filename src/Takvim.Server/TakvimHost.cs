@@ -25,7 +25,17 @@ public static class TakvimHost
     /// <param name="urls">Dinlenecek adresler. Masaüstü kabuğu rastgele bir yerel port verir.</param>
     public static WebApplication Build(string[]? args = null, string? urls = null)
     {
-        var builder = WebApplication.CreateBuilder(args ?? []);
+        // İçerik kökü açıkça uygulamanın kendi klasörüdür. Varsayılan çalışma
+        // dizinidir; masaüstü kabuğuna çift tıklandığında çalışma dizini
+        // kullanıcının bulunduğu yer olur ve ne appsettings.json ne de statik
+        // varlık bildirimi bulunabilir. Bildirim bulunamayınca sayfa biçimsiz
+        // açılır: stil dosyasının adresi üretilemez.
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = args ?? [],
+            ContentRootPath = AppContext.BaseDirectory,
+            WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot"),
+        });
 
         // CalDAV ayarları veritabanından önce okunur: hangi adresin dinleneceği
         // uygulama açılmadan bilinmek zorunda.
@@ -150,6 +160,12 @@ public static class TakvimHost
         // Statik varlık bildirimi giriş derlemesinin adına göre aranır. Masaüstü
         // kabuğundan başlatıldığında giriş derlemesi Takvim.exe olduğu için
         // bildirim bulunamaz; bu yüzden dosya adı açıkça verilir.
+        // İki yol birlikte durur. MapStaticAssets parmak izli adresleri sunar ve
+        // önbelleklemeyi doğru kurar; ama bildirimi yalnızca web projesinin
+        // kendi çıktısında bulur. Masaüstü kabuğundan başlatıldığında bildirim
+        // yüklenemez, @Assets sade adı döndürür ve o adı UseStaticFiles karşılar.
+        // Yalnızca birine güvenmek, uygulamayı biçimsiz açılmaya açık bırakıyordu.
+        app.UseStaticFiles();
         app.MapStaticAssets(StaticAssetsManifest);
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
         app.MapCalDav();
@@ -157,9 +173,18 @@ public static class TakvimHost
         return app;
     }
 
-    /// <summary>Blazor varlıklarını tanımlayan bildirim dosyasının adı.</summary>
-    private static string StaticAssetsManifest =>
-        typeof(TakvimHost).Assembly.GetName().Name + ".staticwebassets.endpoints.json";
+    /// <summary>
+    /// Blazor varlıklarını tanımlayan bildirim dosyasının yolu.
+    /// <para>
+    /// Ad, giriş derlemesine göre aranır; masaüstü kabuğundan başlatıldığında
+    /// giriş derlemesi Takvim.exe olduğu için bulunamaz, bu yüzden açıkça
+    /// verilir. Yol da mutlaktır: göreli bir ad çalışma dizinine göre
+    /// çözülürdü ve o dizin kullanıcının nereden başlattığına bağlıdır.
+    /// </para>
+    /// </summary>
+    private static string StaticAssetsManifest => Path.Combine(
+        AppContext.BaseDirectory,
+        typeof(TakvimHost).Assembly.GetName().Name + ".staticwebassets.endpoints.json");
 
     /// <summary>Şemayı günceller ve ilk açılışta örnek verileri kurar.</summary>
     public static async Task InitializeDatabaseAsync(WebApplication app)
