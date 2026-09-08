@@ -112,4 +112,4 @@ Vekil erişimi (*özel öğeleri görebilir* **kapalı**) — asıl kullanıcın
 | `IsForwardable = false` etkinliği başkasına iletmek | Davet iletme engellenir; ancak zaten `FullDetails` gören biri içeriği elle kopyalayabilir. Bu bir politika işareti, teknik kilit değil. |
 | Tekrarlayan serinin tek örneği `Private` yapılabilir mi? | Evet. İstisna satırı kendi `Visibility` değerini taşır; seri kökününkini geçersiz kılar. |
 | Silinmiş (çöp kutusundaki) etkinliği kim görür? | Yalnızca sahibi ve `CanEdit`+ yetkili vekil. Paylaşımlarda hiç görünmez. |
-| Kaynak/oda takvimi | Her zaman en az `TitleLocation`; kim rezerve etti bilgisi kuruluş politikasına bağlı (Faz 3'te ayarlanabilir). |
+| Kaynak/oda takvimi | Rezervasyon, oda takvimine `Private` bir tutma kaydı olarak yazılır: paylaşıldığında yalnızca doluluk görünür, toplantının başlığı ve açıklaması görünmez. Ayarlanabilir yapılmadı — odanın kimin neyi için tuttuğunu herkese açmak, en dar seçeneği varsayılan yapmaktan daha risklidir. |

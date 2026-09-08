@@ -12,19 +12,21 @@ için sıradan bir masaüstü programıdır; içeride ise CalDAV sunucusu, payla
 ## Çalıştırma
 
 ```
-dotnet run --project src/Takvim.Desktop
+Takvim.cmd
 ```
 
-Ya da derlenmiş hâli:
+Yayın derlemesini yapar ve uygulamayı başlatır. Derlenmiş hâli doğrudan da
+açılabilir:
 
 ```
-src\Takvim.Desktop\bin\Debug\net10.0-windows\Takvim.exe
+src\Takvim.Desktop\bin\Release\net10.0-windows\Takvim.exe
 ```
 
-Arayüzü tarayıcıda geliştirmek için:
+Geliştirirken:
 
 ```
-dotnet run --project src/Takvim.Server
+dotnet run --project src/Takvim.Desktop     gerçek kabuk, tek pencere
+dotnet run --project src/Takvim.Server      arayüz tarayıcıda
 ```
 
 **Gereksinimler:** .NET 10 SDK, Windows 10/11, WebView2 çalışma zamanı
@@ -54,12 +56,16 @@ src/
 └─ Takvim.Desktop/  WPF + WebView2 kabuğu
 
 tests/
-├─ Takvim.Core.Tests/   179 test — tekrarlama, zaman dilimi, ICS, ayrıştırıcı,
-│                       tatiller, izin motoru, müsaitlik hesabı
-└─ Takvim.Data.Tests/   184 test — seri düzenleme, silme, geri alma, hatırlatıcılar,
-                        çalışma düzeni, zamanlama, paylaşım yalıtımı, RSVP,
-                        eskiyen yanıtlar, paylaşım denetimi, uygulama parolaları,
-                        CalDAV kaynak yönetimi
+├─ Takvim.Core.Tests/   310 test — tekrarlama, zaman dilimi, ICS, ayrıştırıcı,
+│                       tatiller, izin motoru, müsaitlik hesabı, biçimli metin,
+│                       ikinci saat dilimi, sessiz saatler
+└─ Takvim.Data.Tests/   579 test — seri düzenleme, silme, geri alma, hatırlatıcılar,
+                        bildirim tercihleri, çalışma düzeni, zamanlama, paylaşım
+                        yalıtımı, RSVP, eskiyen yanıtlar, paylaşım denetimi,
+                        uygulama parolaları, CalDAV kaynak yönetimi, görevler,
+                        kaynak rezervasyonu, randevu sayfaları, abonelikler,
+                        posta önerileri, takvim ve kategori yönetimi, denetim
+                        günlüğü, yedekleme
 ```
 
 Veri katmanı testleri gerçek SQLite üzerinde çalışır (bellek içi dosya), EF Core'un
@@ -101,6 +107,53 @@ etkinlik okuyan her yol `CalendarQueryService` üzerinden geçer, orada her örn
 izin çözümlemesinden geçirilir. Görünmemesi gerekenler elenir, kısıtlı olanların
 kaynağı **karartılmış bir kopyayla değiştirilir** — arayüz yanlışlıkla ham
 başlığı okusa bile gizli veri sızmaz. Bu davranış testlerle korunur.
+
+---
+
+## Faz 3 — durum
+
+| Alan | Durum |
+|---|---|
+| Görevler: bitiş tarihi, tekrar, gün başlığında listelenme | ✅ |
+| Oda ve ekipman rezervasyonu, çakışma denetimi | ✅ |
+| Randevu sayfaları — dışarıdan saat ayırtma | ✅ |
+| Dış ICS beslemelerine abonelik (salt okunur takvimler) | ✅ |
+| Posta kutusundan etkinlik çıkarma (Gmail / Outlook, öneri olarak) | ✅ |
+| Dosya ekleri | ✅ |
+| Biçimli açıklama, gündem ve organizatöre özel notlar | ✅ |
+| Kayıtlı konumlar ve tek tıkla toplantı bağlantısı | ✅ |
+| Etkinlik şablonları | ✅ |
+| Gelişmiş arama ve kayıtlı aramalar | ✅ |
+| Takvim sahipliğinin devri | ✅ |
+| Takvim ve kategori yönetimi arayüzleri | ✅ |
+| Sistem tepsisi simgesi ve Windows bildirimi | ✅ |
+| Yedekleme, geri yükleme ve günlük otomatik yedek | ✅ |
+| Izgarada ikinci saat dilimi sütunu | ✅ |
+| Denetim günlüğü görünümü | ✅ |
+| Bildirim tercihleri ve sessiz saatler | ✅ |
+
+### Bildirimler ve sessiz saatler
+
+Hatırlatıcılar uygulama açık olduğu sürece çalar. Pencere kapatılmak yerine
+tepsiye iner: pencereyi kapatmak çıkmak değildir, çünkü çıksaydı hatırlatıcılar
+da dururdu. Pencere görünmüyorken uyarı Windows bildirimi olarak çıkar, açıkken
+arayüzdeki şerit olarak — ikisi birden değil.
+
+Kenar çubuğu → **Bildirim ayarları** iki şeyi düzenler: hatırlatıcıların tümden
+kapatılması ve sessiz saatler (varsayılan öneri 22:00–08:00, istenirse
+çalışılmayan günlerde bütün gün).
+
+**Sessizlik hatırlatıcıyı tüketmez.** Susturulan bir uyarı "gösterildi" sayılıp
+kapatılmaz; yalnızca o turda çizilmez. Pencere kapandığında etkinlik hâlâ
+yaklaşıyorsa uyarı o an çıkar — 08:30'daki toplantının bir saat önceden kurulmuş
+hatırlatıcısı 07:30'da susar, 08:00'de görünür. Sabaha karşı birikmiş bir yığın
+oluşmaz: hatırlatıcı motoru zaten başlangıcının üzerinden yarım saatten fazla
+geçen uyarıları eler.
+
+**Sessiz saatler hesaba özeldir** ve kullanıcının kendi zaman diliminde
+hesaplanır — duvar saatidir, UTC değil. Aynı nedenle hatırlatıcı **takvim
+sahibine** çalar: paylaşılan bir takvimin uyarısı, o takvimi görebilen herkesin
+ekranında değil sahibinin ekranında çıkar.
 
 ---
 
@@ -215,17 +268,22 @@ davet ona ulaşmaz ve müsaitliği bilinemez; arayüz bunu açıkça belirtir.
 | Değişiklik günlüğü (denetim + senkronizasyon imleci) | ✅ |
 | Takvimleri yan yana sütunlarda gösterme | ✅ |
 
-### Faz 1'de bilinçli olarak yapılmayanlar
+### Bilinçli olarak yapılmayanlar
 
-- **Uygulama kapalıyken hatırlatma.** Bildirimler yalnızca uygulama açıkken çalar.
-  Sistem tepsisi, global kısayol ve Windows bildirimi masaüstü katmanının işidir;
-  bu katman kapsam dışında bırakıldı.
+Faz 1'in bu listesi Faz 3'te büyük ölçüde kapandı — dosya ekleri, biçimli
+açıklama, sessiz saatler, katılımcı/oda/vekil tabloları ve tepsi bildirimi
+yapıldı. Bugün hâlâ kapsam dışı olanlar:
+
+- **Uygulama hiç açık değilken hatırlatma.** Pencere kapalıyken tepsiden bildirim
+  gelir, ama uygulamadan çıkıldığında hiçbir şey çalmaz. Bunun için Windows
+  Görev Zamanlayıcısı'na kayıt ya da bir hizmet gerekirdi; makinede sessizce
+  çalışan bir arka plan süreci, kullanıcının açıkça istemediği bir şeydir.
 - **E-posta ve mobil bildirim kanalları.** Şema destekliyor, gönderim yok.
-- **Sessiz saatler.** Bildirim bölümünün geri kalanıyla birlikte yapılmadı.
-- **Zengin metin açıklama.** Şu an düz metin; alan HTML saklayacak biçimde tanımlı.
-- **Dosya ekleri.** Klasör ve yol hazır, arayüz yok.
-- **Katılımcı, oda, vekil tabloları.** Faz 2/3. `Event` üzerindeki ilgili sütunlar
-  şimdiden var, çünkü sütun eklemek şema göçü demektir; yeni tablo eklemek ucuzdur.
+  Davetler de e-postayla gitmez (iTIP); gerekçesi *Çok kullanıcılı model*
+  bölümündedir.
+- **Kurulum paketi.** Program dağıtılmıyor, bu makinede derlenip çalışıyor.
+  İmzasız bir kurulum paketi Smart App Control'ün önündeki engeli büyütmekten
+  başka bir işe yaramazdı.
 
 ---
 
