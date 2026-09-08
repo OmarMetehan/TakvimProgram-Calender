@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NodaTime;
 using NodaTime.Testing;
 using Takvim.Core.Domain;
+using Takvim.Core.Localization;
 using Takvim.Core.Recurrence;
 using Takvim.Core.Time;
 using Takvim.Data;
@@ -28,6 +29,8 @@ internal sealed class TestDatabase : IDisposable
     public AttendeeService Attendees { get; }
     public UserDirectory Directory { get; }
     public ReminderService Reminders { get; }
+    public WorkScheduleService Schedule { get; }
+    public NotificationSettingsService Notifications { get; }
     public TimeZoneService Zones { get; } = new();
     public RecurrenceExpander Expander { get; }
     public FakeClock Clock { get; } = new(Instant.FromUtc(2026, 1, 1, 9, 0));
@@ -52,7 +55,9 @@ internal sealed class TestDatabase : IDisposable
         Permissions = new CalendarPermissions(Db);
         Query = new CalendarQueryService(Db, Expander, Permissions);
         Undo = new UndoService(Db);
-        Reminders = new ReminderService(Db, Expander, Clock);
+        Schedule = new WorkScheduleService(Db, new TurkishHolidays());
+        Notifications = new NotificationSettingsService(Db, Schedule, Zones, Clock);
+        Reminders = new ReminderService(Db, Expander, Clock, Notifications);
         Attendees = new AttendeeService(Db, Clock);
         Directory = new UserDirectory(Db);
 

@@ -25,6 +25,7 @@ public sealed class CalendarUiState(
     IServiceScopeFactory scopeFactory,
     TimeZoneService timeZones,
     TurkishHolidays holidays,
+    ActiveUserAccessor activeUser,
     IClock clock)
 {
     private readonly List<Calendar> _calendars = [];
@@ -130,6 +131,10 @@ public sealed class CalendarUiState(
         // Hesap silinmişse ilk hesaba düşülür; boş bir ekranla kalınmaz.
         ActiveUser = _users.FirstOrDefault(u => u.Id == ActiveUserId) ?? _users.FirstOrDefault();
         if (ActiveUser is not null) ActiveUserId = ActiveUser.Id;
+
+        // Hatırlatıcı yoklaması arka planda çalışır ve devreyi görmez; aktif
+        // hesabı oradan da okunabilir bir yere koyarız.
+        activeUser.UserId = ActiveUserId;
 
         if (ActiveUser is not null && timeZones.IsKnown(ActiveUser.TimeZoneId))
             ZoneId = ActiveUser.TimeZoneId;

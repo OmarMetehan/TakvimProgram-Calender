@@ -32,7 +32,7 @@ public class ReminderTests : IDisposable
         _t.Detach();
 
         // 08:00'de, 08:50'de çalacak bir hatırlatıcı henüz zamanı gelmemiştir.
-        Assert.Empty(await _t.Reminders.GetDueAsync());
+        Assert.Empty(await _t.Reminders.GetDueAsync(_t.UserId));
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public class ReminderTests : IDisposable
         _t.Detach();
 
         SetNow("2026-03-02 08:51");
-        var due = await _t.Reminders.GetDueAsync();
+        var due = await _t.Reminders.GetDueAsync(_t.UserId);
 
         Assert.Single(due);
         Assert.Equal("Toplantı", due[0].Title);
@@ -60,14 +60,14 @@ public class ReminderTests : IDisposable
         _t.Detach();
 
         SetNow("2026-03-02 08:51");
-        var due = await _t.Reminders.GetDueAsync();
+        var due = await _t.Reminders.GetDueAsync(_t.UserId);
         Assert.Single(due);
 
         await _t.Reminders.MarkFiredAsync(due[0].ReminderId, due[0].OccurrenceStartUtc);
         _t.Detach();
 
         SetNow("2026-03-02 08:55");
-        Assert.Empty(await _t.Reminders.GetDueAsync());
+        Assert.Empty(await _t.Reminders.GetDueAsync(_t.UserId));
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class ReminderTests : IDisposable
         _t.Detach();
 
         SetNow("2026-03-05 12:00");
-        Assert.Empty(await _t.Reminders.GetDueAsync());
+        Assert.Empty(await _t.Reminders.GetDueAsync(_t.UserId));
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class ReminderTests : IDisposable
 
         // Etkinlik 10 dakika önce başladı; hoşgörü süresi 30 dakika.
         SetNow("2026-03-02 09:10");
-        Assert.Single(await _t.Reminders.GetDueAsync());
+        Assert.Single(await _t.Reminders.GetDueAsync(_t.UserId));
     }
 
     // ------------------------------------------------------------------
@@ -112,18 +112,18 @@ public class ReminderTests : IDisposable
 
         // Birinci gün
         SetNow("2026-03-02 08:51");
-        var first = await _t.Reminders.GetDueAsync();
+        var first = await _t.Reminders.GetDueAsync(_t.UserId);
         Assert.Single(first);
         await _t.Reminders.MarkFiredAsync(first[0].ReminderId, first[0].OccurrenceStartUtc);
         _t.Detach();
 
         // Aynı gün ikinci kez çalmaz
         SetNow("2026-03-02 08:55");
-        Assert.Empty(await _t.Reminders.GetDueAsync());
+        Assert.Empty(await _t.Reminders.GetDueAsync(_t.UserId));
 
         // Ertesi gün yeniden çalar
         SetNow("2026-03-03 08:51");
-        var second = await _t.Reminders.GetDueAsync();
+        var second = await _t.Reminders.GetDueAsync(_t.UserId);
         Assert.Single(second);
         Assert.Equal(_t.Utc("2026-03-03 09:00"), second[0].OccurrenceStartUtc);
     }
@@ -142,7 +142,7 @@ public class ReminderTests : IDisposable
         _t.Detach();
 
         SetNow("2026-03-03 08:51");
-        Assert.Empty(await _t.Reminders.GetDueAsync());
+        Assert.Empty(await _t.Reminders.GetDueAsync(_t.UserId));
     }
 
     // ------------------------------------------------------------------
@@ -158,17 +158,17 @@ public class ReminderTests : IDisposable
         _t.Detach();
 
         SetNow("2026-03-02 08:51");
-        var due = await _t.Reminders.GetDueAsync();
+        var due = await _t.Reminders.GetDueAsync(_t.UserId);
         await _t.Reminders.SnoozeAsync(due[0].ReminderId, Duration.FromMinutes(5));
         _t.Detach();
 
         // Erteleme sürerken sessiz
         SetNow("2026-03-02 08:53");
-        Assert.Empty(await _t.Reminders.GetDueAsync());
+        Assert.Empty(await _t.Reminders.GetDueAsync(_t.UserId));
 
         // Süre dolunca yeniden çalar
         SetNow("2026-03-02 08:57");
-        Assert.Single(await _t.Reminders.GetDueAsync());
+        Assert.Single(await _t.Reminders.GetDueAsync(_t.UserId));
     }
 
     // ------------------------------------------------------------------
@@ -187,7 +187,7 @@ public class ReminderTests : IDisposable
         _t.Detach();
 
         SetNow("2026-03-02 08:51");
-        Assert.Empty(await _t.Reminders.GetDueAsync());
+        Assert.Empty(await _t.Reminders.GetDueAsync(_t.UserId));
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public class ReminderTests : IDisposable
 
         // 08:31: yalnızca 30 dakikalık olan çalar.
         SetNow("2026-03-02 08:31");
-        var first = await _t.Reminders.GetDueAsync();
+        var first = await _t.Reminders.GetDueAsync(_t.UserId);
         Assert.Single(first);
         Assert.Equal(30, first[0].MinutesBefore);
 
@@ -210,7 +210,7 @@ public class ReminderTests : IDisposable
 
         // 08:56: beş dakikalık olan çalar.
         SetNow("2026-03-02 08:56");
-        var second = await _t.Reminders.GetDueAsync();
+        var second = await _t.Reminders.GetDueAsync(_t.UserId);
         Assert.Single(second);
         Assert.Equal(5, second[0].MinutesBefore);
     }
@@ -226,7 +226,7 @@ public class ReminderTests : IDisposable
         _t.Detach();
 
         SetNow("2026-03-02 08:51");
-        Assert.Equal("grape", (await _t.Reminders.GetDueAsync())[0].Color);
+        Assert.Equal("grape", (await _t.Reminders.GetDueAsync(_t.UserId))[0].Color);
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public class ReminderTests : IDisposable
         _t.Detach();
 
         SetNow("2026-03-02 08:51");
-        Assert.Empty(await _t.Reminders.GetDueAsync());
+        Assert.Empty(await _t.Reminders.GetDueAsync(_t.UserId));
         Assert.Empty(await _t.Db.Reminders.ToListAsync());
     }
 }

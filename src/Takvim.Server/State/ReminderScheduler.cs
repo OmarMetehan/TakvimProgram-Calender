@@ -20,14 +20,19 @@ public sealed class ReminderBroadcast
 /// <summary>
 /// Hatırlatıcıları düzenli aralıklarla yoklar.
 /// <para>
-/// Faz 1'de yalnızca uygulama açıkken çalışır: bildirim, arayüzdeki şerittir.
-/// Uygulama kapalıyken hatırlatma (sistem tepsisi, Windows bildirimi) masaüstü
-/// katmanının işidir ve Faz 1 kapsamına alınmamıştır.
+/// Yalnızca uygulama açıkken çalışır. Pencere kapalıyken hatırlatma masaüstü
+/// katmanının işidir: aynı yayın noktasını kabuk da dinler ve pencere
+/// görünmüyorken tepsi bildirimi gösterir.
+/// </para>
+/// <para>
+/// Yoklama aktif hesap adına yapılır; bildirim tercihleri ve sessiz saatler o
+/// hesabın ayarlarıdır.
 /// </para>
 /// </summary>
 public sealed partial class ReminderScheduler(
     IServiceScopeFactory scopeFactory,
     ReminderBroadcast broadcast,
+    ActiveUserAccessor activeUser,
     ILogger<ReminderScheduler> logger) : BackgroundService
 {
     /// <summary>
@@ -59,7 +64,7 @@ public sealed partial class ReminderScheduler(
             await using var scope = scopeFactory.CreateAsyncScope();
             var reminders = scope.ServiceProvider.GetRequiredService<ReminderService>();
 
-            var due = await reminders.GetDueAsync(ct).ConfigureAwait(false);
+            var due = await reminders.GetDueAsync(activeUser.UserId, ct).ConfigureAwait(false);
             broadcast.Publish(due);
         }
         catch (OperationCanceledException)

@@ -59,6 +59,9 @@ public class TakvimDbContext(DbContextOptions<TakvimDbContext> options) : DbCont
             e.Property(x => x.Email).HasMaxLength(320);
             e.Property(x => x.TimeZoneId).HasMaxLength(64);
             e.Property(x => x.Locale).HasMaxLength(16);
+
+            // Sessiz saat penceresi dört sütundan hesaplanır; kendisi sütun değildir.
+            e.Ignore(x => x.QuietHours);
         });
 
         modelBuilder.Entity<Calendar>(e =>

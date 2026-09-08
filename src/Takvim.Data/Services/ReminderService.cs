@@ -29,8 +29,18 @@ public sealed record DueReminder(
 /// örnek için tetiklendiği <see cref="Reminder.LastFiredForOccurrenceAt"/>
 /// alanında tutulur.
 /// </para>
+/// <para>
+/// Hatırlatıcılar takvim sahibine çalar. Aynı makinede birden çok yerel hesap
+/// olabildiği için sorgu her zaman bir kullanıcıya bağlıdır: paylaşılan bir
+/// takvimin uyarısı, o takvimi görebilen herkesin ekranında değil sahibinin
+/// ekranında çıkar.
+/// </para>
 /// </summary>
-public sealed class ReminderService(TakvimDbContext db, RecurrenceExpander expander, IClock clock)
+public sealed class ReminderService(
+    TakvimDbContext db,
+    RecurrenceExpander expander,
+    IClock clock,
+    NotificationSettingsService notifications)
 {
     /// <summary>
     /// Uygulama kapalıyken geçen hatırlatıcılar açılışta topluca çalmasın diye
@@ -41,9 +51,20 @@ public sealed class ReminderService(TakvimDbContext db, RecurrenceExpander expan
     /// <summary>Bir hatırlatıcının etkinlikten en fazla ne kadar önce kurulabileceği.</summary>
     private static readonly Duration MaxLeadTime = Duration.FromDays(30);
 
-    /// <summary>Zamanı gelmiş hatırlatıcıları döner. Tetiklendi olarak işaretlemez.</summary>
-    public async Task<List<DueReminder>> GetDueAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Verilen kullanıcının zamanı gelmiş hatırlatıcılarını döner. Tetiklendi
+    /// olarak işaretlemez.
+    /// <para>
+    /// Bildirimler kapalıysa ya da sessiz saatlerdeysek liste boş döner:
+    /// hatırlatıcı satırlarına dokunulmaz, yalnızca gösterilmez. Sessizlik
+    /// bitince aynı hatırlatıcı — hâlâ zamanındaysa — bir sonraki turda çalar.
+    /// </para>
+    /// </summary>
+    public async Task<List<DueReminder>> GetDueAsync(Guid userId, CancellationToken ct = default)
     {
+        var silence = await notifications.EvaluateAsync(userId, ct).ConfigureAwait(false);
+        if (silence.IsSilenced) return [];
+
         var now = clock.GetCurrentInstant();
         var horizon = now + MaxLeadTime;
 
@@ -53,6 +74,7 @@ public sealed class ReminderService(TakvimDbContext db, RecurrenceExpander expan
             .Where(r => r.Event!.DeletedAt == null
                         && r.Event.Status != EventStatus.Cancelled
                         && r.Event.Calendar!.DeletedAt == null
+                        && r.Event.Calendar.OwnerUserId == userId
                         // Seri hâlâ sürüyorsa ya da tekil etkinlik ufuktan önceyse aday.
                         && (r.Event.SeriesEndUtc == null || r.Event.SeriesEndUtc > now - MaxLeadTime)
                         && r.Event.StartUtc < horizon)

@@ -116,6 +116,7 @@ public static class TakvimHost
         builder.Services.AddScoped<CategoryService>();
         builder.Services.AddScoped<BackupService>();
         builder.Services.AddScoped<AuditService>();
+        builder.Services.AddScoped<NotificationSettingsService>();
         builder.Services.AddScoped<LocationService>();
         builder.Services.AddScoped<TemplateService>();
         builder.Services.AddScoped<SearchService>();
@@ -147,6 +148,7 @@ public static class TakvimHost
         // Hatırlatıcı zamanlayıcısı uygulama ömrü boyunca tek örnektir; sonucu
         // yayın noktası üzerinden açık devrelere dağıtılır.
         builder.Services.AddSingleton<ReminderBroadcast>();
+        builder.Services.AddSingleton<ActiveUserAccessor>();
         builder.Services.AddHostedService<ReminderScheduler>();
 
         // Blazor devresi başına arayüz durumu.

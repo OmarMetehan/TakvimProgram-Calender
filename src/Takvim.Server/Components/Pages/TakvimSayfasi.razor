@@ -33,7 +33,8 @@
                  OnManageCalendars="() => _panel = Panel.Calendars"
                  OnManageCategories="() => _panel = Panel.Categories"
                  OnOpenBackup="() => _panel = Panel.Backup"
-                 OnOpenAudit="() => _panel = Panel.Audit" />
+                 OnOpenAudit="() => _panel = Panel.Audit"
+                 OnOpenNotifications="() => _panel = Panel.Notifications" />
 
         <main class="icerik">
             @if (State.IsLoading)
@@ -107,6 +108,11 @@
     @if (_panel == Panel.Backup)
     {
         <BackupPanel OnClose="CloseAll" />
+    }
+
+    @if (_panel == Panel.Notifications)
+    {
+        <NotificationPanel OnClose="CloseAll" />
     }
 
     @if (_panel == Panel.Categories)
@@ -229,7 +235,7 @@
     [Inject] public required IServiceScopeFactory Scopes { get; set; }
     [Inject] public required IJSRuntime Js { get; set; }
 
-    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search, Tasks, Resources, Appointments, Subscriptions, Mail, Calendars, Categories, Backup, Audit }
+    private enum Panel { None, QuickCreate, Editor, Trash, ImportExport, Shortcuts, WorkSchedule, Scheduling, People, CalDav, Search, Tasks, Resources, Appointments, Subscriptions, Mail, Calendars, Categories, Backup, Audit, Notifications }
 
     private Panel _panel = Panel.None;
 
