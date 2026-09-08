@@ -9,6 +9,98 @@ için sıradan bir masaüstü programıdır; içeride ise CalDAV sunucusu, payla
 
 ---
 
+## Genel bakış
+
+Bu program, Outlook ve Google Takvim'in günlük kullanımda gerçekten işe yarayan
+yanlarını tek bir Windows uygulamasında topluyor. Arayüzü, tarih biçimleri,
+resmi tatilleri ve doğal dil ayrıştırması tamamen Türkçe: *"perşembe 14:00 Ahmet
+ile toplantı"* yazmak bir etkinlik oluşturmaya yetiyor.
+
+**Veriler makinede kalıyor.** Bulut hesabı, abonelik ya da dışarıda çalışan bir
+sunucu yok; her şey `%LOCALAPPDATA%\Takvim` altındaki tek bir SQLite dosyasında
+duruyor. Telefon, tablet ve Thunderbird, uygulamanın kendi içindeki CalDAV
+sunucusuna bağlanarak aynı takvimi görüyor — bu sunucu varsayılan olarak
+kapalı, açılmadıkça hiçbir port dinlenmiyor.
+
+Neler yapabildiği:
+
+- **Görünümler** — gün, hafta, iş haftası, N gün, ay, yıl ve zamanlama; ikinci
+  saat dilimi sütunu, yoğunluk ısı haritası, yazdırma düzenleri, koyu tema.
+- **Etkinlikler** — tekrar kuralları ve istisnaları, sürükle-bırak, üç kapsamlı
+  seri düzenleme, kategoriler, ekler, biçimli açıklama, şablonlar, ICS içe/dışa
+  aktarma, geri alma ve 30 günlük çöp kutusu.
+- **Toplantılar** — katılımcılar, RSVP, yeni saat önerme, zamanlama yardımcısı,
+  oda ve ekipman rezervasyonu, randevu sayfaları.
+- **Paylaşım** — beş kademeli izin, vekil erişimi, kategori bazlı gizlilik ve
+  her okuma yolunda çalışan tek kapılı izin motoru.
+- **Hatırlatma** — uygulama içi şerit, sistem tepsisi bildirimi, erteleme ve
+  sessiz saatler.
+- **Bakım** — günlük otomatik yedek, geri yükleme, değişiklik günlüğü.
+
+### Kullanılan teknolojiler
+
+| Katman | Teknoloji | Neden |
+|---|---|---|
+| Dil ve çalışma zamanı | **.NET 10**, C# | Tek dil, tek derleme; masaüstü ve sunucu aynı çözümde |
+| Masaüstü kabuğu | **WPF** + **WebView2** (tepsi simgesi için Windows Forms `NotifyIcon`) | Arayüz web teknolojisiyle çizilir ama tarayıcı gerektirmez |
+| Arayüz ve sunucu | **ASP.NET Core** (Kestrel) + **Blazor Server** | Arayüz, CalDAV ve randevu sayfaları aynı gömülü sunucuda |
+| Veri | **EF Core 10** + **SQLite** | Tek dosyalık veritabanı, şema göçlerle sürümlenir |
+| Zaman | **NodaTime** | Yerel saat ile IANA zaman dilimini ayrı tutar; yaz saati kuralı değişince kayıtlar kaymaz |
+| Takvim biçimi | **Ical.Net** | RFC 5545 tekrar kuralları ve ICS okuma/yazma |
+| Senkronizasyon | Kendi **CalDAV** sunucusu (RFC 4791 / WebDAV) | iPhone, iPad, macOS Takvim ve Thunderbird doğrudan bağlanır |
+| Güvenlik | PBKDF2-SHA256 uygulama parolaları, DPAPI ile korunan belirteçler | Cihaz parolaları açık metin saklanmaz |
+| Testler | **xUnit v3** — 889 test | Veri testleri gerçek SQLite üzerinde çalışır |
+
+---
+
+## Overview (English)
+
+**Takvim** ("calendar" in Turkish) is a desktop calendar application for
+Windows that blends what Outlook and Google Calendar actually get used for into
+a single program. Its interface, date formats, public holidays and natural
+language parsing are entirely Turkish: typing *"perşembe 14:00 Ahmet ile
+toplantı"* is enough to create an event.
+
+**Your data stays on your machine.** There is no cloud account, subscription or
+external server: everything lives in a single SQLite file under
+`%LOCALAPPDATA%\Takvim`. Phones, tablets and Thunderbird sync against the
+CalDAV server embedded in the application itself — that server is off by
+default and opens no port until you enable it.
+
+What it does:
+
+- **Views** — day, week, work week, N days, month, year and scheduling; a
+  secondary time zone column, a year heat map, print layouts, dark theme.
+- **Events** — recurrence rules and exceptions, drag and drop, three-scope
+  series editing, categories, attachments, rich text, templates, ICS import and
+  export, undo and a 30-day trash.
+- **Meetings** — attendees, RSVP, proposing a new time, a scheduling assistant,
+  room and equipment booking, bookable appointment pages.
+- **Sharing** — five permission levels, delegate access, category-level privacy,
+  enforced by a single-gate permission engine every read path passes through.
+- **Reminders** — in-app toasts, system tray notifications, snoozing and quiet
+  hours.
+- **Maintenance** — daily automatic backups, restore, an audit log.
+
+### Technology stack
+
+| Layer | Technology | Why |
+|---|---|---|
+| Language and runtime | **.NET 10**, C# | One language and one build for both desktop and server |
+| Desktop shell | **WPF** + **WebView2** (Windows Forms `NotifyIcon` for the tray) | The UI is drawn with web technology without requiring a browser |
+| UI and server | **ASP.NET Core** (Kestrel) + **Blazor Server** | UI, CalDAV and appointment pages run on the same embedded server |
+| Data | **EF Core 10** + **SQLite** | A single-file database, versioned through migrations |
+| Time | **NodaTime** | Keeps local time and IANA zone separate, so records don't shift when DST rules change |
+| Calendar format | **Ical.Net** | RFC 5545 recurrence rules and ICS read/write |
+| Sync | A hand-written **CalDAV** server (RFC 4791 / WebDAV) | iPhone, iPad, macOS Calendar and Thunderbird connect directly |
+| Security | PBKDF2-SHA256 app passwords, DPAPI-protected tokens | Device passwords are never stored in clear text |
+| Tests | **xUnit v3** — 889 tests | Data tests run against real SQLite, not an in-memory provider |
+
+> The rest of this document is in Turkish, as are the code comments; class and
+> field names are English.
+
+---
+
 ## Çalıştırma
 
 ```
